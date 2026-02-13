@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>MapPin - 注册</title>
+    <style>
+        body { font-family: sans-serif; padding: 50px; }
+        .box { border: 1px solid #ccc; padding: 20px; width: 300px; }
+        input { display: block; margin-bottom: 10px; width: 100%; padding: 8px; }
+        button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #message { margin-top: 10px; color: red; }
+    </style>
+</head>
+<body>
+
+    <div class="box">
+        <h2>用户注册</h2>
+        <input type="text" id="username" placeholder="请输入用户名">
+        <input type="password" id="password" placeholder="请输入密码">
+        <button onclick="doRegister()">立即注册</button>
+        <div id="message"></div>
+    </div>
+
+    <script>
+        async function doRegister() {
+            // 1. 获取输入框的值
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+
+            if(!u || !p) {
+                alert("账号密码不能为空！");
+                return;
+            }
+
+            // 2. 发送请求给 Node.js 后端
+            try {
+                const response = await fetch('http://localhost:3000/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+
+                const data = await response.json();
+
+                // 3. 显示结果
+                const msgDiv = document.getElementById('message');
+                if (data.success) {
+                    msgDiv.style.color = 'green';
+                    msgDiv.innerText = '✅ ' + data.message;
+                } else {
+                    msgDiv.style.color = 'red';
+                    msgDiv.innerText = '❌ ' + data.message;
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("请求失败，请检查服务器是否开启");
+            }
+        }
+    </script>
+</body>
+</html>

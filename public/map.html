@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>我的地图笔记</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; } /* 地图占满全屏 */
+        
+        /* 自定义弹窗样式 */
+        .note-form { width: 200px; }
+        .note-form input, .note-form textarea { width: 100%; margin-bottom: 5px; }
+        .note-form button { width: 100%; background: #007bff; color: white; border: none; padding: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // 模拟当前登录用户 (之后我们会从登录功能获取)
+        const CURRENT_USER = "Garvofadge"; 
+
+        // A. 初始化地图 (设置中心点为北京，缩放级别 10)
+        const map = L.map('map').setView([39.9042, 116.4074], 4);
+
+        // B. 加载 OpenStreetMap 瓦片
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // --- C. 加载已有的笔记 ---
+        async function loadNotes() {
+            const res = await fetch('http://localhost:3000/notes');
+            const notes = await res.json();
+            
+            notes.forEach(note => {
+                // 在地图上添加标记
+                L.marker([note.lat, note.lng])
+                 .addTo(map)
+                 .bindPopup(`<b>${note.title}</b><br>${note.content}<br><small>by ${note.username}</small>`);
+            });
+        }
+        loadNotes(); // 页面加载时自动执行
+
+        // --- D. 地图点击事件: 弹出输入框 ---
+        let tempMarker = null; // 临时标记
+
+        map.on('click', function(e) {
+            const { lat, lng } = e.latlng;
+
+            // 1. 如果之前有没保存的框，先删掉
+            if (tempMarker) map.removeLayer(tempMarker);
+
+            // 2. 生成弹窗 HTML 表单
+            const popupContent = `
+                <div class="note-form">
+                    <h3>写笔记</h3>
+                    <input id="note-title" placeholder="标题" />
+                    <textarea id="note-content" placeholder="内容..."></textarea>
+                    <button onclick="saveNote(${lat}, ${lng})">发布</button>
+                </div>
+            `;
+
+            // 3. 在点击处显示弹窗
+            tempMarker = L.popup()
+                .setLatLng([lat, lng])
+                .setContent(popupContent)
+                .openOn(map);
+        });
+
+        // --- E. 保存笔记功能 ---
+        async function saveNote(lat, lng) {
+            const title = document.getElementById('note-title').value;
+            const content = document.getElementById('note-content').value;
+
+            if (!title) return alert("标题不能为空");
+
+            // 发送给后端
+            const res = await fetch('http://localhost:3000/notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: CURRENT_USER,
+                    title, content, lat, lng
+                })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                // 关闭弹窗
+                map.closePopup();
+                // 添加一个正式的标记
+                L.marker([lat, lng]).addTo(map)
+                 .bindPopup(`<b>${title}</b><br>${content}<br><small>by ${CURRENT_USER}</small>`)
+                 .openPopup();
+            } else {
+                alert("发布失败");
+            }
+        }
+    </script>
+</body>
+</html>
