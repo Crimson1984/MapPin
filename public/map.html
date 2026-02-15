@@ -80,12 +80,6 @@
         }
         .edit-btn:hover { background: #0056b3; }
 
-        /* 私密笔记的图标样式 */
-        .private-marker {
-            filter: hue-rotate(140deg); /* 色相旋转，把蓝色变红色/紫色 */
-        }
-
-
         /* 搜索框悬浮在地图左上角 */
         #search-container {
             position: absolute;
@@ -137,6 +131,15 @@
             cursor: pointer;
             margin-left: 10px;
         }
+
+        /* 好友笔记: 绿色 */
+        .friend-marker {
+            filter: hue-rotate(260deg) brightness(1.2); /* 调整色相变成绿色/青色 */
+        }
+        /* 之前的私密笔记: 红色/紫色 */
+        .private-marker {
+            filter: hue-rotate(140deg);
+        }
     </style>
 </head>
 <body>
@@ -151,7 +154,19 @@
             正在浏览: <b id="visit-name"></b> 的地图
             <button onclick="exitVisitMode()">退出</button>
         </div>
+
+        <div style="margin-top: 10px;">
+            <button id="inbox-btn" onclick="toggleInbox()" style="width:100%; padding:8px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer;">
+                📩 好友请求 <span id="request-count">(0)</span>
+            </button>
+            
+            <div id="inbox-list" style="display:none; background:white; margin-top:5px; border-radius:4px; box-shadow:0 4px 10px rgba(0,0,0,0.1); max-height:200px; overflow-y:auto;">
+                </div>
+        </div>
+
+        <div id="visiting-banner" style="display:none;">...</div>
     </div>
+
 
     <div id="floating-card" class="hidden">
         <button class="close-btn" onclick="closeCard()">×</button>
@@ -211,8 +226,14 @@
             notes.forEach(note => {
 
                 // 决定是否加滤镜类名
-                const customClassName = (note.visibility === 'private') ? 'private-marker' : '';
-
+                let customClassName = '';
+            
+                if (note.visibility === 'private') {
+                    customClassName = 'private-marker'; // 红色
+                } else if (note.visibility === 'friends') {
+                    customClassName = 'friend-marker';  // 绿色
+                }
+                
                 // 创建自定义 Icon (Leaflet 机制)
                 const myIcon = L.icon({
                     iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -397,6 +418,7 @@
                     
                     <select id="note-visibility" style="width:100%; margin-bottom:5px; padding:5px;">
                         <option value="public">🌍 公开 (所有人可见)</option>
+                        <option value="friends">🤝 好友 (仅互关好友)</option>
                         <option value="private">🔒 私密 (仅自己可见)</option>
                     </select>
                     
@@ -481,6 +503,7 @@
 
             // 判断当前是 public 还是 private，决定哪个 option 被 selected
             const isPublic = (note.visibility === 'public') ? 'selected' : '';
+            const isFriends = (note.visibility === 'friends') ? 'selected' : '';
             const isPrivate = (note.visibility === 'private') ? 'selected' : '';
 
             // 构造 HTML
@@ -489,6 +512,7 @@
                 
                 <select id="edit-visibility" style="width:100%; margin-bottom:10px; padding:5px; border:1px solid #ddd; border-radius:4px;">
                     <option value="public" ${isPublic}>🌍 公开 (所有人可见)</option>
+                    <option value="friends" ${isFriends}>🤝 好友</option>
                     <option value="private" ${isPrivate}>🔒 私密 (仅自己可见)</option>
                 </select>
 
@@ -571,11 +595,23 @@
                 const res = await fetch(`http://localhost:3000/users/search?q=${query}`);
                 const users = await res.json();
 
-                resultsDiv.innerHTML = users.map(user => `
-                    <div class="search-item" onclick="visitUser('${user.username}')">
-                        👤 ${user.username}
+                resultsDiv.innerHTML = users.map(user => {
+                    // 不能加自己
+                    if (user.username === CURRENT_USER) return '';
+                    
+                    return `
+                    <div class="search-item" style="display:flex; justify-content:space-between; align-items:center;">
+                        <span onclick="visitUser('${user.username}')" style="cursor:pointer; flex-grow:1;">
+                            👤 ${user.username}
+                        </span>
+                        
+                        <button onclick="event.stopPropagation(); sendFriendRequest('${user.username}')" 
+                                style="background:#28a745; color:white; border:none; border-radius:3px; padding:2px 8px; cursor:pointer; font-size:12px;">
+                            ➕ 加好友
+                        </button>
                     </div>
-                `).join('');
+                    `;
+                }).join('');
             }, 300);
         }
 
@@ -604,6 +640,83 @@
         }
 
 
+        // --- A. 发送好友请求 ---
+        async function sendFriendRequest(targetName) {
+            if (!confirm(`确定要向 ${targetName} 发送好友申请吗?`)) return;
+
+            try {
+                const res = await fetch('http://localhost:3000/friends/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ requester: CURRENT_USER, receiver: targetName })
+                });
+                const data = await res.json();
+                alert(data.message); // 显示 "申请已发送" 或 "已经是好友了"
+            } catch (err) {
+                console.error(err);
+                alert("请求发送失败");
+            }
+        }
+
+        // --- B. 刷新/显示好友请求信箱 ---
+        async function toggleInbox() {
+            const listDiv = document.getElementById('inbox-list');
+            
+            // 如果当前是关着的，就打开并加载数据
+            if (listDiv.style.display === 'none') {
+                listDiv.style.display = 'block';
+                await loadInbox();
+            } else {
+                listDiv.style.display = 'none';
+            }
+        }
+
+        async function loadInbox() {
+            const res = await fetch(`http://localhost:3000/friends/pending?username=${CURRENT_USER}`);
+            const requests = await res.json();
+
+            // 更新按钮上的数字
+            document.getElementById('request-count').innerText = `(${requests.length})`;
+
+            const listDiv = document.getElementById('inbox-list');
+            if (requests.length === 0) {
+                listDiv.innerHTML = '<div style="padding:10px; color:#999; text-align:center;">暂无新请求</div>';
+                return;
+            }
+
+            // 渲染列表
+            listDiv.innerHTML = requests.map(req => `
+                <div style="padding:10px; border-bottom:1px solid #eee;">
+                    <div><b>${req.requester}</b> 想加你为好友</div>
+                    <div style="margin-top:5px; text-align:right;">
+                        <button onclick="respondToRequest(${req.id}, 'accepted')" style="background:#28a745; color:white; border:none; padding:4px 8px; cursor:pointer; margin-right:5px;">同意</button>
+                        <button onclick="respondToRequest(${req.id}, 'rejected')" style="background:#dc3545; color:white; border:none; padding:4px 8px; cursor:pointer;">拒绝</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- C. 同意/拒绝请求 ---
+        async function respondToRequest(id, action) {
+            try {
+                const res = await fetch('http://localhost:3000/friends/response', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, action })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    // 成功后重新加载信箱，列表项会自动消失
+                    loadInbox(); 
+                    alert(action === 'accepted' ? "已添加好友!" : "已拒绝请求");
+                }
+            } catch (err) {
+                alert("操作失败");
+            }
+        }
+
+        // ⚡️ 页面加载时自动检查一下有没有新消息
+        loadInbox();
     </script>
 </body>
 </html>
