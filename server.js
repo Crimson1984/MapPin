@@ -49,33 +49,191 @@ app.post('/register',(req,res) => {
 });
 
 
+// --- 登录接口 ---
+app.post('/login',(req,res) => {
+    const {username, password} = req.body;
+
+    //查询数据库有没有这个人
+    const sql = 'SELECT * FROM users WHERE username = ? AND password = ?';
+
+    db.query(sql, [username, password],(err, results) => {
+        if(err){
+            return res.status(500).json({ success: false, message: '服务器错误'});
+        }
+        if(results.length > 0){
+            //登陆成功,返回用户信息
+            res.json({ success: true, message: '登陆成功!', username: username});
+        } else{
+            //查不到说明账号或者密码错误
+            res.json({success: false, message:'账号或者密码错误!'});
+        }
+    });
+});
+
+
+
 // --- 获取所有笔记(加载地图使用) ---
 app.get('/notes', (req,res) => {
-    const sql = 'SELECT * FROM notes';
 
-    db.query(sql, (err,results) => {
-        if(err){
-            console.error("查询失败:", err);
-            return res.status(500).json({ error: err.message});
+    // ⚠️ 我们需要知道是谁在查，才能决定给他看什么
+    // 这里简单起见，让前端把当前用户名通过 query 参数传过来
+    // 例如: /notes?username=Garvofadge
+    const currentUser = req.query.username;
+    const targetUser = req.query.targetUser; // 查谁 (可选)
+
+    let sql = '';
+    let params = [];
+
+    if (targetUser) {
+        // A. 访问特定模式: 只查 targetUser 的笔记
+        // 规则: 如果 targetUser 是我自己，看全部; 否则只能看 public
+        if (currentUser === targetUser) {
+            sql = 'SELECT * FROM notes WHERE username = ?';
+            params = [currentUser];
+        } else {
+            sql = 'SELECT * FROM notes WHERE username = ? AND visibility = "public"';
+            params = [targetUser];
         }
-        res.json(results); // 把数据库里的笔记发给前端
-    })
-})
+    } else {
+        // B. 默认模式 (全图): 看所有公开 + 我的私密 (这就是你上一步写的逻辑)
+        sql = `
+            SELECT * FROM notes 
+            WHERE visibility = 'public' 
+            OR (visibility = 'private' AND username = ?)
+        `;
+        params = [currentUser];
+    }
+
+    db.query(sql, params, (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
+    });
+});
+
 
 
 // --- 发布新笔记(点击地图保存时用)---
 app.post('/notes',(req,res) => {
-    const { username, title, content, lat , lng } = req.body;
+    const { username, title, content, lat, lng, visibility } = req.body;
+
+    // 默认为 public，防止前端没传
+    const safeVisibility = visibility || 'private';
 
     console.log('收到新笔记:',title, lat, lng);
 
-    const sql = 'INSERT INTO notes (username, title, content, lat, lng) VALUE(?, ?, ?, ?, ?)';
-    db.query(sql, [username, title, content, lat, lng], (err,result) => {
+    const sql = 'INSERT INTO notes (username, title, content, lat, lng, visibility) VALUES (?, ?, ?, ?, ?, ?)';
+    db.query(sql, [username, title, content, lat, lng, safeVisibility], (err,result) => {
         if(err){
             console.error(err);
             return res.status(500).json({ success: false,message:'发布失败'});
         }
-        res.json({ success:true, id: result.insertId,message: '笔记已发布!'});
+        res.json({ 
+            success: true, 
+            id: result.insertId, 
+            message: '发布成功',
+            note: { id: result.insertId, username, title, content, lat, lng, visibility: safeVisibility, created_at: new Date() }
+        });
+    });
+});
+
+
+// --- 删除笔记 ---
+// 路径中的id是一个占位符
+app.delete('/notes/:id', (req,res) => {
+    //强制把 id 转为数字 (防止字符串匹配失败)
+    const noteId = parseInt(req.params.id);
+    const { username } = req.body; //获取是谁在请求删除
+
+
+    // [调试] 在终端打印接收到的数据
+    console.log(`-----------------------------------`);
+    console.log(`[1] 收到删除请求 - 目标ID: ${noteId}`);
+    console.log(`[2] 操作者: ${username}`);
+
+    //安全检查:查看这条笔记是否是此人写的
+    const checkSql = ' SELECT username FROM notes WHERE id = ?';
+    db.query(checkSql, [noteId], (err, results) => {
+        if (err) {
+            console.error('[错误] 数据库查询出错:', err);
+            return res.status(500).json({ success: false, message: '数据库错误' });
+        }
+
+        // [调试] 打印数据库查到的结果
+        console.log(`[3] 数据库查询结果:`, results);
+
+        // 如果结果是空数组 []，说明数据库里根本没有这个 ID
+        if (results.length === 0) {
+            console.log('[失败] 数据库里找不到这条笔记！');
+            return res.status(404).json({ success: false, message: '笔记不存在' });
+        }
+
+        const note = results[0];
+        if (note.username !== username) {
+            console.log(`[拒绝] 权限不足。笔记归属: ${note.username}, 请求者: ${username}`);
+            return res.status(403).json({ success: false, message: '你无权删除这条笔记！' });
+        }
+
+        //通过验证
+        const deleteSql = 'DELETE FROM notes WHERE id = ?';
+        db.query(deleteSql, [noteId], (err, result) => {
+            if(err){
+                console.error('[错误] 删除执行失败:', err);
+                return res.status(500).json({ success: false, message: '删除失败'});
+            }
+            console.log('[成功] 笔记已物理删除');
+            res.json({ success: true, message:'删除成功'});
+        });
+    });
+});
+
+
+// --- 修改笔记 ---
+app.put('/notes/:id', (req,res) =>{
+    const noteId = parseInt(req.params.id);
+    const { username, title, content, visibility } = req.body; // 获取新的波标题和内容
+
+    console.log(`[修改请求] ID: ${noteId}, 操作者: ${username}`);
+
+    //验证权限
+    const checkSql = 'SELECT username FROM notes WHERE id = ?';
+    db.query(checkSql, [noteId], (err, results) =>{
+        if(err || results.length === 0) {
+            return res.status(404).json({ success: false, message: '笔记不存在'});
+        }
+
+        if(results[0].username !== username) {
+            return res.status(403).json({ success: false, message: '无权限修改笔记'});
+        }
+
+        //鉴权成功
+        const updateSql = 'UPDATE notes SET title = ?,content = ?,visibility = ? WHERE id = ?';
+        db.query(updateSql, [title, content, visibility, noteId], (err,result) => {
+            if(err) {
+                console.error('更新失败', err);
+                return res.status(500).json({ success: false, message: '更新失败'});
+            }
+            console.log('[成功]笔记内容已更新');
+            res.json({ success: true, message: '更新成功'});
+        });
+    });
+});
+
+
+// --- 搜索用户接口 ---
+// 例如: /users/search?q=adm
+app.get('/users/search', (req, res) => {
+    const query = req.query.q;
+    if (!query) return res.json([]);
+
+    // 使用 SQL 的 LIKE 语句进行模糊匹配
+    // % 表示任意字符，所以 %adm% 能匹配 "admin", "superadmin"
+    const sql = 'SELECT id, username FROM users WHERE username LIKE ? LIMIT 10';
+    
+    db.query(sql, [`%${query}%`], (err, results) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
     });
 });
 

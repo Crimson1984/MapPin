@@ -5,68 +5,409 @@
     <title>我的地图笔记</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; }
-        #map { height: 100vh; width: 100%; } /* 地图占满全屏 */
+        /* 地图全屏 */
+        body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #map { width: 100vw; height: 100vh; z-index: 1; }
+
+        /* --- 悬浮窗样式 --- */
+        #floating-card {
+            position: absolute;
+            top: 80px;            /* 距离顶部留点空隙 */
+            bottom: 80px;         /* 距离底部留点空隙 */
+            width: 400px;         /* 固定宽度 */
+            background: rgba(255, 255, 255, 0.95); /* 半透明白底 */
+            backdrop-filter: blur(10px); /* 毛玻璃模糊效果 */
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2); /* 阴影 */
+            border-radius: 12px;
+            z-index: 1000;        /* 必须比地图高 */
+            padding: 25px;
+            box-sizing: border-box;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* 丝滑动画 */
+            
+            /* 默认状态: 稍微往下沉一点，透明度为0 */
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none; /* 隐藏时不挡鼠标 */
+        }
+
+        /* 激活状态 (显示) */
+        #floating-card.active {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto; /* 显示时允许点击 */
+        }
+
+        /* --- 左右位置类 --- */
+        .card-left { left: 50px; }  /* 显示在屏幕左侧 */
+        .card-right { right: 50px; } /* 显示在屏幕右侧 */
+
+        /* 内容样式 */
+        .close-btn {
+            position: absolute; top: 15px; right: 15px;
+            background: none; border: none; font-size: 24px; cursor: pointer; color: #666;
+        }
+        .close-btn:hover { color: #000; }
+        .meta-info { color: #888; font-size: 0.9em; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        #card-body { line-height: 1.6; color: #333; font-size: 1.1em; }
+
+        /* 之前的弹窗输入框样式 */
+        .note-form { width: 220px; }
+        .note-form input, .note-form textarea { width: 100%; box-sizing: border-box; margin-bottom: 8px; padding: 5px; }
+        .note-form button { width: 100%; padding: 8px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        /*删除按钮样式*/
+        .delete-btn {
+            background: #ff4d4f;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            float: right; /* 让按钮靠右 */
+        }
+        .delete-btn:hover { background: #d9363e; }
+
+        /*编辑按钮样式*/
+        .edit-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            float: right; /* 让按钮靠右 */
+        }
+        .edit-btn:hover { background: #0056b3; }
+
+        /* 私密笔记的图标样式 */
+        .private-marker {
+            filter: hue-rotate(140deg); /* 色相旋转，把蓝色变红色/紫色 */
+        }
+
+
+        /* 搜索框悬浮在地图左上角 */
+        #search-container {
+            position: absolute;
+            top: 20px;
+            left: 60px; /* 避开 Leaflet 的缩放按钮 */
+            z-index: 1000; /* 在地图上面 */
+            width: 250px;
+        }
         
-        /* 自定义弹窗样式 */
-        .note-form { width: 200px; }
-        .note-form input, .note-form textarea { width: 100%; margin-bottom: 5px; }
-        .note-form button { width: 100%; background: #007bff; color: white; border: none; padding: 5px; cursor: pointer; }
+        #user-search {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        #search-results {
+            background: white;
+            border-radius: 4px;
+            margin-top: 5px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .search-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .search-item:hover { background: #f0f2f5; }
+
+        #visiting-banner {
+            margin-top: 10px;
+            background: #007bff;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #visiting-banner button {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            cursor: pointer;
+            margin-left: 10px;
+        }
     </style>
 </head>
 <body>
-
+    
+    <div id="user-display"></div>
+    
     <div id="map"></div>
+
+    <div id="search-container">
+        <input type="text" id="user-search" placeholder="🔍 搜索用户..." oninput="searchUsers()">
+        <div id="search-results"></div> <div id="visiting-banner" style="display:none;">
+            正在浏览: <b id="visit-name"></b> 的地图
+            <button onclick="exitVisitMode()">退出</button>
+        </div>
+    </div>
+
+    <div id="floating-card" class="hidden">
+        <button class="close-btn" onclick="closeCard()">×</button>
+        <div id="card-content">
+            <h2 id="card-title">标题</h2>
+            <div class="meta-info">
+                <span id="card-author">作者</span> | 
+                <span id="card-time">时间</span>
+            </div>
+            <div id="card-body">内容...</div>
+
+            <div id="card-footer" style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px;"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // 模拟当前登录用户 (之后我们会从登录功能获取)
-        const CURRENT_USER = "Garvofadge"; 
+        // 从浏览器缓存里读取登陆存入的用户名
+        const CURRENT_USER = localStorage.getItem('currentUser'); 
 
-        // A. 初始化地图 (设置中心点为北京，缩放级别 10)
-        const map = L.map('map').setView([39.9042, 116.4074], 4);
+        //如果还没有登陆,回滚登录页
+        if(!CURRENT_USER) {
+            alert("请先登录！");
+            window.location.href = 'login.html';
+        }
+
+        document.getElementById('user-display').innerText = "当前用户: " + CURRENT_USER;
+
+        // A. 初始化地图 (设置中心点为SEU，缩放级别 10)
+        const map = L.map('map',{ doubleClickZoom: false }).setView([31.8889, 118.8142], 10);
 
         // B. 加载 OpenStreetMap 瓦片
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
+        // 我们把之前的 marker 存起来，方便清除
+        let currentMarkers = [];
+
         // --- C. 加载已有的笔记 ---
-        async function loadNotes() {
-            const res = await fetch('http://localhost:3000/notes');
+        async function loadNotes(targetUser = null) {
+            // 1. 清除旧标记
+            currentMarkers.forEach(marker => map.removeLayer(marker));
+            currentMarkers = []; // 清空数组
+
+            let url = `http://localhost:3000/notes?username=${CURRENT_USER}`;
+            if (targetUser) {
+                url += `&targetUser=${targetUser}`;
+            }
+
+            const res = await fetch(url);
             const notes = await res.json();
-            
+
             notes.forEach(note => {
+
+                // 决定是否加滤镜类名
+                const customClassName = (note.visibility === 'private') ? 'private-marker' : '';
+
+                // 创建自定义 Icon (Leaflet 机制)
+                const myIcon = L.icon({
+                    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    tooltipAnchor: [16, -28],
+                    className: customClassName // ⚡️ 关键点：加上我们的 CSS 类
+                });
+
                 // 在地图上添加标记
-                L.marker([note.lat, note.lng])
-                 .addTo(map)
-                 .bindPopup(`<b>${note.title}</b><br>${note.content}<br><small>by ${note.username}</small>`);
+                // L.marker([note.lat, note.lng])
+                //  .addTo(map)
+                //  .bindPopup(`<b>${note.title}</b><br>${note.content}<br><small>by ${note.username}</small>`);
+                // 1.创建标记
+                const marker = L.marker([note.lat, note.lng], { icon: myIcon }).addTo(map);
+
+                // 2.绑定点击事件，显示悬浮窗
+                marker.on('click', function(e){
+                    // 阻止事件冒泡(防止触发地图的 click 事件)
+                    L.DomEvent.stopPropagation(e);
+                    showFloatingCard(note);
+                });
+
+                //鼠标悬停显示笔记信息
+                const dateStr = new Date(note.created_at).toLocaleDateString();
+
+                //使用 HTML 内容
+                const tooltipContent = `
+                <div style="text-align:center;line-height: 1.4;">
+                    <b style="font-size: 14px;">${note.title}</b><br>
+                    <span style="color: #666; font-size: 12px;">${note.username} · ${dateStr}</span>
+                </div>
+                `;
+                //绑定 Tooltip
+                marker.bindTooltip(tooltipContent, {
+                    direction: 'top', 
+                    offset: [0, -30],
+                    className: 'custom-tooltip'
+                });
+
+                // ⚡️ 关键: 存入数组
+                currentMarkers.push(marker);
             });
+
+            // 如果是访问别人，自动调整地图视野，包含所有笔记
+            if (targetUser && notes.length > 0) {
+                const group = new L.featureGroup(currentMarkers);
+                map.fitBounds(group.getBounds());
+            }
         }
+
+        // --- 显示悬浮窗 ---
+        function showFloatingCard(note) {
+            const card = document.getElementById('floating-card');
+
+            // 计算标记在屏幕上的像素位置
+            const screenPoint = map.latLngToContainerPoint([note.lat, note.lng]);
+            const screenWidth = window.innerWidth;
+
+            //清楚旧位置类,防止冲突
+            card.classList.remove('card-left', 'card-right');
+
+            // 判断左右位置
+            // 如果 x > 屏幕一半,说明标记在右边,悬浮窗应该在左边
+            if (screenPoint.x > screenWidth / 2){
+                card.classList.add('card-left');
+            } else {
+                //否则在右边
+                card.classList.add('card-right');
+            }
+
+            // 填充内容
+            // document.getElementById('card-title').innerText = note.title;
+            // document.getElementById('card-author').innerText = note.username;
+            // document.getElementById('card-time').innerText = new Date(note.created_at).toLocaleDateString();
+            // document.getElementById('card-body').innerText = note.content;
+
+            // 编辑(给标题和内容加特定的 ID，方便后面 JS 找它们)
+            card.setAttribute('data-current-note-id', note.id); // 存储当前笔记 ID，删除时会用到
+            
+            //渲染只读模式的HTML
+            renderReadMode(note);
+
+
+            // // 删除按钮
+            // const footerDiv = document.getElementById('card-footer'); //在html中添加一个id为card-footer的div
+
+            // //只有当前用户是作者,才会显示删除按钮
+            // if(CURRENT_USER === note.username) {
+            //     footerDiv.innerHTML = `
+            //         <button onclick="deleteNote(${note.id})" class="delete-btn">🗑️ 删除笔记</button>
+            //     `;
+            //     footerDiv.style.display = 'block';
+            // } else {
+            //     footerDiv.innerHTML = ''; //清空
+            //     footerDiv.style.display = 'none';
+            // }
+
+            //添加激活类,触发 css 显示动画
+            card.classList.add('active');
+
+            //移除hidden类,防止样式冲突
+            card.classList.remove('hidden');
+        }
+
+        // --- 辅助函数 :渲染只读模式---
+        function renderReadMode(note) {
+            document.getElementById('card-content').innerHTML = `
+               <h2 id="card-title">${note.title}</h2>
+               <div class="meta-info">
+                    <span>${note.username}</span> | 
+                    <span>${new Date(note.created_at).toLocaleDateString()}</span>
+                </div>
+                <div id="card-body" style="white-space: pre-wrap;">${note.content}</div>
+
+                <div id="card-footer" style="margin-top: 20px; border-top: 1px solid #eee; pading-top: 10px;">
+                    ${getFooterButtons(note)}
+                </div>
+            `;
+        }
+
+        // --- 辅助函数 :根据用户权限返回底部按钮 ---
+        function getFooterButtons(note) {
+            //只有作者自己能看到删除按钮
+            if(CURRENT_USER === note.username) {
+                return `
+                    <button onclick="deleteNote(${note.id})" class="delete-btn">🗑️ 删除笔记</button>
+                    <button onclick='enableEditMode(${JSON.stringify(note)})' class="edit-btn">✏️ 编辑</button>
+                `;
+            }
+            return  ''; //其他人没有按钮
+        }
+
+        // --- 关闭悬浮窗 ---
+        function closeCard() {
+            const card = document.getElementById('floating-card');
+
+            // 关键点：只移除 active 类！
+            // 这样 card-left 或 card-right 依然保留着，
+            // 卡片会在原地淡出，不会跳到左边。
+            card.classList.remove('active');
+            
+            // 可选：为了逻辑严谨，可以加一个 hidden 类，但在 CSS 中主要靠 .active 控制
+            card.classList.add('hidden');
+        }
+
         loadNotes(); // 页面加载时自动执行
 
-        // --- D. 地图点击事件: 弹出输入框 ---
+        // --- 地图点击事件 ---
         let tempMarker = null; // 临时标记
 
-        map.on('click', function(e) {
+        //单机清空悬浮窗
+        map.on('click', function() {
+            const card = document.getElementById('floating-card');
+
+            //只有卡片是active状态时,才有关闭效果
+            if(card.classList.contains('active')){
+                closeCard();
+            }
+
+            //若无卡片打开,则什么也不做,防止误触
+        });
+
+        //双击添加笔记
+        map.on('dblclick', function(e) {
+            // 如果点击地图空白处,先关闭悬浮窗
+            closeCard(); 
+
+            //获取双击位置
             const { lat, lng } = e.latlng;
 
             // 1. 如果之前有没保存的框，先删掉
-            if (tempMarker) map.removeLayer(tempMarker);
+            //if (tempMarker) map.removeLayer(tempMarker);
 
             // 2. 生成弹窗 HTML 表单
             const popupContent = `
                 <div class="note-form">
                     <h3>写笔记</h3>
                     <input id="note-title" placeholder="标题" />
-                    <textarea id="note-content" placeholder="内容..."></textarea>
+                    
+                    <select id="note-visibility" style="width:100%; margin-bottom:5px; padding:5px;">
+                        <option value="public">🌍 公开 (所有人可见)</option>
+                        <option value="private">🔒 私密 (仅自己可见)</option>
+                    </select>
+                    
+                    <textarea id="note-content" placeholder="内容..." rows="3"></textarea>
                     <button onclick="saveNote(${lat}, ${lng})">发布</button>
                 </div>
             `;
 
             // 3. 在点击处显示弹窗
-            tempMarker = L.popup()
+            //tempMarker = L.popup()
+            L.popup()
                 .setLatLng([lat, lng])
                 .setContent(popupContent)
                 .openOn(map);
@@ -76,6 +417,7 @@
         async function saveNote(lat, lng) {
             const title = document.getElementById('note-title').value;
             const content = document.getElementById('note-content').value;
+            const visibility = document.getElementById('note-visibility').value;
 
             if (!title) return alert("标题不能为空");
 
@@ -85,7 +427,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     username: CURRENT_USER,
-                    title, content, lat, lng
+                    title, content, lat, lng, visibility
                 })
             });
 
@@ -101,6 +443,167 @@
                 alert("发布失败");
             }
         }
+
+        // --- 删除笔记 ---
+        async function deleteNote(noteId) {
+            if (!confirm("确定要删除这这条笔记吗?此操作不可恢复.")) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`http://localhost:3000/notes/${noteId}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json'},
+                    body: JSON.stringify({ username: CURRENT_USER}) //告诉后端是谁
+                });
+
+                const data = await res.json();
+
+                if(data.success) {
+                    alert("删除成功");
+                    closeCard(); //关闭卡片
+
+                    //刷新地图,reload
+                    location.reload();
+                } else {
+                    alert("删除失败:" + data.message);
+                }
+            } catch (err) {
+                console.error(err);
+                alert("请求出错");
+            }
+        }
+
+
+        // --- 启用编辑模式 ---
+        function enableEditMode(note) {
+            const contentDiv = document.getElementById('card-content');
+
+            // 判断当前是 public 还是 private，决定哪个 option 被 selected
+            const isPublic = (note.visibility === 'public') ? 'selected' : '';
+            const isPrivate = (note.visibility === 'private') ? 'selected' : '';
+
+            // 构造 HTML
+            contentDiv.innerHTML = `
+                <input type="text" id="edit-title" value="${note.title}" style="width:100%; font-size:1.5em; font-weight:bold; margin-bottom:5px;">
+                
+                <select id="edit-visibility" style="width:100%; margin-bottom:10px; padding:5px; border:1px solid #ddd; border-radius:4px;">
+                    <option value="public" ${isPublic}>🌍 公开 (所有人可见)</option>
+                    <option value="private" ${isPrivate}>🔒 私密 (仅自己可见)</option>
+                </select>
+
+                <div class="meta-info">正在编辑...</div>
+                <textarea id="edit-content" rows="6" style="width:100%; padding:5px;">${note.content}</textarea>
+                
+                <div style="margin-top: 10px; text-align: right;">
+                    <button onclick='cancelEdit(${JSON.stringify(note)})' style="margin-right:10px;">取消</button>
+                    <button onclick="saveEdit(${note.id})" style="background:#28a745; color:white; padding:5px 15px; border:none; cursor:pointer;">💾 保存</button>
+                </div>
+            `;
+        }
+
+
+        // --- 取消编辑 ---
+        function cancelEdit(note) {
+            // 直接重新渲染回只读模式的 HTML 就行了
+            renderReadMode(note);
+        }
+
+        // --- 保存编辑 ---
+        async function saveEdit(noteId) {
+            const newTitle = document.getElementById('edit-title').value;
+            const newContent = document.getElementById('edit-content').value;
+            const newVisibility = document.getElementById('edit-visibility').value;
+
+            try {
+                const res = await fetch(`http://localhost:3000/notes/${noteId}`, {
+                    method: 'PUT', // 使用 PUT 方法更新
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        username: CURRENT_USER, 
+                        title: newTitle, 
+                        content: newContent,
+                        visibility: newVisibility
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    // 构造一个新的 note 对象，用来刷新界面
+                    // const updatedNote = {
+                    //     id: noteId,
+                    //     title: newTitle,
+                    //     content: newContent,
+                    //     username: CURRENT_USER,
+                    //     created_at: new Date() // 偷懒暂时用当前时间
+                    // };
+                    
+                    // // 变回只读模式
+                    // renderReadMode(updatedNote);
+                    
+                    // // ⚡️ 重要：刷新地图上的数据，否则地图上的 Tooltip 还是旧的
+                    // // 最简单的办法是重新加载所有笔记
+                    // loadNotes(); 
+                    loadNotes();
+                    closeCard();
+                    alert("修改成功!");
+
+                } else {
+                    alert("保存失败: " + data.message);
+                }
+            } catch (err) {
+                console.error(err);
+                alert("请求出错");
+            }
+        }
+
+        // --- 搜索用户 ---
+        let searchTimeout;
+        function searchUsers() {
+            const query = document.getElementById('user-search').value;
+            const resultsDiv = document.getElementById('search-results');
+            
+            // 防抖: 停止输入 300ms 后才发送请求
+            clearTimeout(searchTimeout);
+            if (!query) { resultsDiv.innerHTML = ''; return; }
+
+            searchTimeout = setTimeout(async () => {
+                const res = await fetch(`http://localhost:3000/users/search?q=${query}`);
+                const users = await res.json();
+
+                resultsDiv.innerHTML = users.map(user => `
+                    <div class="search-item" onclick="visitUser('${user.username}')">
+                        👤 ${user.username}
+                    </div>
+                `).join('');
+            }, 300);
+        }
+
+        // --- 访问用户 (进入主页模式) ---
+        function visitUser(targetName) {
+            // 1. 隐藏搜索结果
+            document.getElementById('search-results').innerHTML = '';
+            document.getElementById('user-search').value = '';
+
+            // 2. 显示“正在访问”横幅
+            document.getElementById('visiting-banner').style.display = 'flex';
+            document.getElementById('visit-name').innerText = targetName;
+
+            // 3. 重新加载地图，只看这个人的笔记
+            loadNotes(targetName);
+            
+            // 4. 关闭可能打开的悬浮窗
+            closeCard();
+        }
+
+        // --- 退出访问模式 ---
+        function exitVisitMode() {
+            document.getElementById('visiting-banner').style.display = 'none';
+            // 重新加载全图 (不传参)
+            loadNotes();
+        }
+
+
     </script>
 </body>
 </html>
