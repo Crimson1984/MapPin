@@ -37,12 +37,14 @@
             const data = await res.json();
 
             if (data.success) {
-                // ⚡️ 关键点：把用户名存到浏览器的 "localStorage" 里
-                // 这样在 map.html 页面就能读到了
+                // 1. 存用户名 (用于显示 "欢迎, xxx")
                 localStorage.setItem('currentUser', data.username);
                 
+                // 2. ⚡️ 存 Token (用于证明身份)
+                localStorage.setItem('userToken', data.token);
+                
                 alert("登录成功！跳转中...");
-                window.location.href = 'map.html'; // 跳转到地图页
+                window.location.href = 'map.html';
             } else {
                 alert(data.message);
             }

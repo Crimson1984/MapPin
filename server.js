@@ -1,6 +1,36 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
+const bcrypt = require('bcryptjs'); //引入密钥库
+const jwt = require('jsonwebtoken'); // 引入 JWT 库
+
+// 密钥：这是服务器的“私章”，绝对不能泄露给别人！
+// 在真实项目中，这个应该放在环境变量里，这里为了演示直接写死
+const SECRET_KEY = 'my_super_secret_key_123';
+
+// --- 🛡️ 中间件: 安检门函数 ---
+// 它的作用: 拦住请求 -> 检查 Token -> 没问题就放行 (next)
+function authenticateToken(req, res, next) {
+    // 1. 从请求头里拿 Token
+    // 格式通常是: "Authorization: Bearer <token>"
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // 只要 "Bearer " 后面那串
+
+    // 2. 如果没带 Token，直接踢回去
+    if (token == null) return res.status(401).json({ success: false, message: '未登录或无权限' });
+
+    // 3. 验证 Token 真伪
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.status(403).json({ success: false, message: 'Token 无效或已过期' });
+
+        // 4. Token 是真的！把解密出来的用户信息挂在 req 上
+        // 以后在这个请求的后续处理中，req.user 就是这个用户的真实身份
+        req.user = user;
+        
+        // 5. 放行，进入下一个环节 (比如去发笔记)
+        next();
+    });
+}
 
 const app = express();
 app.use(cors()); // 允许前端跨域
@@ -27,45 +57,117 @@ db.connect(err => {
 
 
 // --- 注册接口(API) ---
-app.post('/register',(req,res) => {
-    // 1.获取前端发来的数据
-    const{username,password} = req.body;
+// app.post('/register',(req,res) => {
+//     // 1.获取前端发来的数据
+//     const{username,password} = req.body;
 
-    console.log('收到注册请求:',username,password); //在终端打印
+//     console.log('收到注册请求:',username,password); //在终端打印
 
-    // 2.准备SQL语句(使用?占位符防止SQL注入)
-    const sql = 'INSERT INTO users (username,password) VALUES (?, ?)';
+//     // 2.准备SQL语句(使用?占位符防止SQL注入)
+//     const sql = 'INSERT INTO users (username,password) VALUES (?, ?)';
 
-    // 3.执行SQL
-    db.query(sql, [username,password], (err,result) => {
-        if(err){
-            console.error(err);
-            //如果报错,告诉前端
-            return res.status(500).json({ success: false, message:'注册失败(可能是用户名已存在)'});
-        }
-        //成功则返回信息
-        res.status(200).json({ success: true, message: '注册成功!'});
-    });
+//     // 3.执行SQL
+//     db.query(sql, [username,password], (err,result) => {
+//         if(err){
+//             console.error(err);
+//             //如果报错,告诉前端
+//             return res.status(500).json({ success: false, message:'注册失败(可能是用户名已存在)'});
+//         }
+//         //成功则返回信息
+//         res.status(200).json({ success: true, message: '注册成功!'});
+//     });
+// });
+// --- 注册接口 (加密版) ---
+// ⚡️ 注意: 函数前面加了 async，因为加密需要时间
+app.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+    console.log('收到注册请求:', username); // 密码就不打印了，安全第一
+
+    try {
+        // 1. 生成盐 (Salt): 就像炒菜加佐料，让密码更难被破解
+        const salt = await bcrypt.genSalt(10);
+        
+        // 2. 加密密码: 把明文变成乱码
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        // 3. 存入数据库: 注意这里存的是 hashedPassword
+        const sql = 'INSERT INTO users (username, password) VALUES (?, ?)';
+        db.query(sql, [username, hashedPassword], (err, result) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ success: false, message: '注册失败 (可能用户名已存在)' });
+            }
+            res.status(200).json({ success: true, message: '注册成功!' });
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: '服务器加密出错' });
+    }
 });
 
 
 // --- 登录接口 ---
-app.post('/login',(req,res) => {
-    const {username, password} = req.body;
+// app.post('/login',(req,res) => {
+//     const {username, password} = req.body;
 
-    //查询数据库有没有这个人
-    const sql = 'SELECT * FROM users WHERE username = ? AND password = ?';
+//     //查询数据库有没有这个人
+//     const sql = 'SELECT * FROM users WHERE username = ? AND password = ?';
 
-    db.query(sql, [username, password],(err, results) => {
-        if(err){
-            return res.status(500).json({ success: false, message: '服务器错误'});
+//     db.query(sql, [username, password],(err, results) => {
+//         if(err){
+//             return res.status(500).json({ success: false, message: '服务器错误'});
+//         }
+//         if(results.length > 0){
+//             //登陆成功,返回用户信息
+//             res.json({ success: true, message: '登陆成功!', username: username});
+//         } else{
+//             //查不到说明账号或者密码错误
+//             res.json({success: false, message:'账号或者密码错误!'});
+//         }
+//     });
+// });
+// --- 登录接口 (加密验证版) ---
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+
+    // 1. 第一步: 只根据用户名查找用户
+    const sql = 'SELECT * FROM users WHERE username = ?';
+    
+    db.query(sql, [username], async (err, results) => {
+        if (err) return res.status(500).json({ success: false, message: '服务器错误' });
+
+        // 如果连人都没找到
+        if (results.length === 0) {
+            return res.json({ success: false, message: '用户不存在' });
         }
-        if(results.length > 0){
-            //登陆成功,返回用户信息
-            res.json({ success: true, message: '登陆成功!', username: username});
-        } else{
-            //查不到说明账号或者密码错误
-            res.json({success: false, message:'账号或者密码错误!'});
+
+        const user = results[0];
+
+        // 2. 第二步: 比对密码 (关键步骤!)
+        // bcrypt.compare(用户输入的明文, 数据库里的乱码)
+        // 这是一个异步操作，会返回 true 或 false
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (isMatch) {
+            // 密码正确！
+            // ⚡️ 新增: 生成 Token (数字身份证)
+            // payload: 身份证上写什么信息? (存 id 和 username)
+            // expiresIn: 有效期 (比如 1 小时后过期，需要重新登录)
+            const token = jwt.sign(
+                { id: user.id, username: user.username }, 
+                SECRET_KEY, 
+                { expiresIn: '1h' }
+            );
+
+            // 把 token 发给前端
+            res.json({ 
+                success: true, 
+                message: '登录成功!', 
+                username: user.username,
+                token: token // <--- 这里把 token 发过去了
+            });
+        } else {
+            // 密码错误
+            res.json({ success: false, message: '密码错误!' });
         }
     });
 });
@@ -111,9 +213,12 @@ app.post('/login',(req,res) => {
 // });
 
 // --- 获取笔记接口 (终极版: 支持好友可见性) ---
-app.get('/notes', (req, res) => {
-    const currentUser = req.query.username; 
+app.get('/notes', authenticateToken, (req, res) => {
+    const currentUser = req.user.username; 
+
     const targetUser = req.query.targetUser; // 如果指定了看某人
+
+    console.log(`[读取] 用户 ${currentUser} 正在请求${targetUser}地图数据...`);
 
     let sql = '';
     let params = [];
@@ -185,24 +290,52 @@ app.get('/notes', (req, res) => {
 
 
 // --- 发布新笔记(点击地图保存时用)---
-app.post('/notes',(req,res) => {
-    const { username, title, content, lat, lng, visibility } = req.body;
+// app.post('/notes',(req,res) => {
+//     const { username, title, content, lat, lng, visibility } = req.body;
 
-    // 默认为 public，防止前端没传
-    const safeVisibility = visibility || 'private';
+//     // 默认为 public，防止前端没传
+//     const safeVisibility = visibility || 'private';
 
-    console.log('收到新笔记:',title, lat, lng);
+//     console.log('收到新笔记:',title, lat, lng);
+
+//     const sql = 'INSERT INTO notes (username, title, content, lat, lng, visibility) VALUES (?, ?, ?, ?, ?, ?)';
+//     db.query(sql, [username, title, content, lat, lng, safeVisibility], (err,result) => {
+//         if(err){
+//             console.error(err);
+//             return res.status(500).json({ success: false,message:'发布失败'});
+//         }
+//         res.json({ 
+//             success: true, 
+//             id: result.insertId, 
+//             message: '发布成功',
+//             note: { id: result.insertId, username, title, content, lat, lng, visibility: safeVisibility, created_at: new Date() }
+//         });
+//     });
+// });
+// --- 发布新笔记 (安全版) ---
+// 1. 在路径后面加上 authenticateToken，表示先过安检，再执行后面的函数
+app.post('/notes', authenticateToken, (req, res) => {
+    
+    // 2. 从 Token 里获取真实的用户名 (不再使用 req.body.username)
+    const username = req.user.username; 
+    
+    const { title, content, lat, lng, visibility } = req.body;
+    const safeVisibility = visibility || 'public';
+
+    console.log(`[安全操作] 用户 ${username} 正在发布笔记...`);
 
     const sql = 'INSERT INTO notes (username, title, content, lat, lng, visibility) VALUES (?, ?, ?, ?, ?, ?)';
-    db.query(sql, [username, title, content, lat, lng, safeVisibility], (err,result) => {
-        if(err){
+    
+    db.query(sql, [username, title, content, lat, lng, safeVisibility], (err, result) => {
+        if (err) {
             console.error(err);
-            return res.status(500).json({ success: false,message:'发布失败'});
+            return res.status(500).json({ success: false, message: '发布失败' });
         }
         res.json({ 
             success: true, 
             id: result.insertId, 
             message: '发布成功',
+            // 返回给前端更新界面用
             note: { id: result.insertId, username, title, content, lat, lng, visibility: safeVisibility, created_at: new Date() }
         });
     });
@@ -211,16 +344,14 @@ app.post('/notes',(req,res) => {
 
 // --- 删除笔记 ---
 // 路径中的id是一个占位符
-app.delete('/notes/:id', (req,res) => {
+app.delete('/notes/:id', authenticateToken, (req,res) => { //加安检
     //强制把 id 转为数字 (防止字符串匹配失败)
     const noteId = parseInt(req.params.id);
-    const { username } = req.body; //获取是谁在请求删除
+    const username = req.user.username;; //获取是谁在请求删除,从 Token 获取真实身份
 
 
     // [调试] 在终端打印接收到的数据
-    console.log(`-----------------------------------`);
-    console.log(`[1] 收到删除请求 - 目标ID: ${noteId}`);
-    console.log(`[2] 操作者: ${username}`);
+    console.log(`[安全删除] 用户 ${username} 尝试删除笔记 ${noteId}`);
 
     //安全检查:查看这条笔记是否是此人写的
     const checkSql = ' SELECT username FROM notes WHERE id = ?';
@@ -231,7 +362,7 @@ app.delete('/notes/:id', (req,res) => {
         }
 
         // [调试] 打印数据库查到的结果
-        console.log(`[3] 数据库查询结果:`, results);
+        console.log(`数据库查询结果:`, results);
 
         // 如果结果是空数组 []，说明数据库里根本没有这个 ID
         if (results.length === 0) {
@@ -252,7 +383,7 @@ app.delete('/notes/:id', (req,res) => {
                 console.error('[错误] 删除执行失败:', err);
                 return res.status(500).json({ success: false, message: '删除失败'});
             }
-            console.log('[成功] 笔记已物理删除');
+            console.log('[成功] 笔记已删除');
             res.json({ success: true, message:'删除成功'});
         });
     });
@@ -260,11 +391,12 @@ app.delete('/notes/:id', (req,res) => {
 
 
 // --- 修改笔记 ---
-app.put('/notes/:id', (req,res) =>{
+app.put('/notes/:id', authenticateToken, (req,res) =>{
     const noteId = parseInt(req.params.id);
-    const { username, title, content, visibility } = req.body; // 获取新的波标题和内容
+    const username = req.user.username; // 从 Token 获取真实身份
+    const { title, content, visibility } = req.body; // 注意: body 里不需要 username 了
 
-    console.log(`[修改请求] ID: ${noteId}, 操作者: ${username}`);
+    console.log(`[修改请求]用户 ${username} 尝试修改笔记 ${noteId}`);
 
     //验证权限
     const checkSql = 'SELECT username FROM notes WHERE id = ?';
@@ -311,8 +443,9 @@ app.get('/users/search', (req, res) => {
 
 
 // --- 1. 发送好友请求 ---
-app.post('/friends/request', (req, res) => {
-    const { requester, receiver } = req.body;
+app.post('/friends/request', authenticateToken, (req, res) => {
+    const requester = req.user.username; 
+    const { receiver } = req.body;
 
     // 自己不能加自己
     if (requester === receiver) {
@@ -361,8 +494,8 @@ app.post('/friends/request', (req, res) => {
 });
 
 // --- 2. 获取“待处理”的好友请求 (别人发给我的) ---
-app.get('/friends/pending', (req, res) => {
-    const myName = req.query.username;
+app.get('/friends/pending', authenticateToken, (req, res) => {
+    const myName = req.user.username;
     // 查 requester 是别人，receiver 是我，且状态是 pending 的记录
     const sql = 'SELECT * FROM friendships WHERE receiver = ? AND status = "pending"';
     
@@ -373,7 +506,7 @@ app.get('/friends/pending', (req, res) => {
 });
 
 // --- 3. 同意/拒绝好友请求 ---
-app.put('/friends/response', (req, res) => {
+app.put('/friends/response', authenticateToken, (req, res) => {
     const { id, action } = req.body; // id 是 friendship 表的主键, action 是 'accepted' 或 'rejected'
     
     const sql = 'UPDATE friendships SET status = ? WHERE id = ?';

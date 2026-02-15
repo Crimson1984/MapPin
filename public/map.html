@@ -211,16 +211,37 @@
 
         // --- C. 加载已有的笔记 ---
         async function loadNotes(targetUser = null) {
-            // 1. 清除旧标记
+            //拿证
+            const token = localStorage.getItem('userToken');
+            if (!token) {
+                // 如果没登录，直接踢回登录页
+                window.location.href = 'login.html';
+                return;
+            }
+
+            // 清除旧标记
             currentMarkers.forEach(marker => map.removeLayer(marker));
             currentMarkers = []; // 清空数组
 
-            let url = `http://localhost:3000/notes?username=${CURRENT_USER}`;
+            let url = `http://localhost:3000/notes`;
             if (targetUser) {
                 url += `&targetUser=${targetUser}`;
             }
 
-            const res = await fetch(url);
+            // 发送请求 (带 Token)
+            const res = await fetch(url, {
+                headers: { 
+                    'Authorization': 'Bearer ' + token 
+                }
+            });
+
+            // 处理结果 (如果 Token 过期，后端会返回 403)
+            if (res.status === 403 || res.status === 401) {
+                alert("登录已过期，请重新登录");
+                window.location.href = 'login.html';
+                return;
+            }
+
             const notes = await res.json();
 
             notes.forEach(note => {
@@ -233,7 +254,7 @@
                 } else if (note.visibility === 'friends') {
                     customClassName = 'friend-marker';  // 绿色
                 }
-                
+
                 // 创建自定义 Icon (Leaflet 机制)
                 const myIcon = L.icon({
                     iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -307,11 +328,6 @@
                 card.classList.add('card-right');
             }
 
-            // 填充内容
-            // document.getElementById('card-title').innerText = note.title;
-            // document.getElementById('card-author').innerText = note.username;
-            // document.getElementById('card-time').innerText = new Date(note.created_at).toLocaleDateString();
-            // document.getElementById('card-body').innerText = note.content;
 
             // 编辑(给标题和内容加特定的 ID，方便后面 JS 找它们)
             card.setAttribute('data-current-note-id', note.id); // 存储当前笔记 ID，删除时会用到
@@ -319,20 +335,6 @@
             //渲染只读模式的HTML
             renderReadMode(note);
 
-
-            // // 删除按钮
-            // const footerDiv = document.getElementById('card-footer'); //在html中添加一个id为card-footer的div
-
-            // //只有当前用户是作者,才会显示删除按钮
-            // if(CURRENT_USER === note.username) {
-            //     footerDiv.innerHTML = `
-            //         <button onclick="deleteNote(${note.id})" class="delete-btn">🗑️ 删除笔记</button>
-            //     `;
-            //     footerDiv.style.display = 'block';
-            // } else {
-            //     footerDiv.innerHTML = ''; //清空
-            //     footerDiv.style.display = 'none';
-            // }
 
             //添加激活类,触发 css 显示动画
             card.classList.add('active');
@@ -441,16 +443,26 @@
             const content = document.getElementById('note-content').value;
             const visibility = document.getElementById('note-visibility').value;
 
+            // 从浏览器缓存拿 Token
+            const token = localStorage.getItem('userToken');
+
+            // 如果没 Token，说明没登录，直接踢出去
+            if (!token) {
+                alert("请先登录！");
+                window.location.href = 'login.html';
+                return;
+            }
+
             if (!title) return alert("标题不能为空");
 
             // 发送给后端
             const res = await fetch('http://localhost:3000/notes', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: CURRENT_USER,
-                    title, content, lat, lng, visibility
-                })
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token 
+                },
+                body: JSON.stringify({ title, content, lat, lng, visibility })
             });
 
             const data = await res.json();
@@ -472,11 +484,16 @@
                 return;
             }
 
+            const token = localStorage.getItem('userToken'); // 拿证
+            if (!token) return alert("请先登录");
+
             try {
                 const res = await fetch(`http://localhost:3000/notes/${noteId}`, {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json'},
-                    body: JSON.stringify({ username: CURRENT_USER}) //告诉后端是谁
+                    headers: {
+                         'Content-Type': 'application/json',
+                         'Authorization': 'Bearer ' + token // ⚡️ 亮证
+                    }
                 });
 
                 const data = await res.json();
@@ -484,9 +501,7 @@
                 if(data.success) {
                     alert("删除成功");
                     closeCard(); //关闭卡片
-
-                    //刷新地图,reload
-                    location.reload();
+                    loadNotes();
                 } else {
                     alert("删除失败:" + data.message);
                 }
@@ -539,12 +554,17 @@
             const newContent = document.getElementById('edit-content').value;
             const newVisibility = document.getElementById('edit-visibility').value;
 
+            const token = localStorage.getItem('userToken'); // 拿证
+            if (!token) return alert("请先登录");
+
             try {
                 const res = await fetch(`http://localhost:3000/notes/${noteId}`, {
                     method: 'PUT', // 使用 PUT 方法更新
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json' ,
+                        'Authorization': 'Bearer ' + token // ⚡️ 亮证
+                    },
                     body: JSON.stringify({ 
-                        username: CURRENT_USER, 
                         title: newTitle, 
                         content: newContent,
                         visibility: newVisibility
@@ -553,21 +573,6 @@
 
                 const data = await res.json();
                 if (data.success) {
-                    // 构造一个新的 note 对象，用来刷新界面
-                    // const updatedNote = {
-                    //     id: noteId,
-                    //     title: newTitle,
-                    //     content: newContent,
-                    //     username: CURRENT_USER,
-                    //     created_at: new Date() // 偷懒暂时用当前时间
-                    // };
-                    
-                    // // 变回只读模式
-                    // renderReadMode(updatedNote);
-                    
-                    // // ⚡️ 重要：刷新地图上的数据，否则地图上的 Tooltip 还是旧的
-                    // // 最简单的办法是重新加载所有笔记
-                    // loadNotes(); 
                     loadNotes();
                     closeCard();
                     alert("修改成功!");
@@ -584,6 +589,14 @@
         // --- 搜索用户 ---
         let searchTimeout;
         function searchUsers() {
+            //拿证
+            const token = localStorage.getItem('userToken');
+            if (!token) {
+                // 如果没登录，直接踢回登录页
+                window.location.href = 'login.html';
+                return;
+            }
+
             const query = document.getElementById('user-search').value;
             const resultsDiv = document.getElementById('search-results');
             
@@ -592,7 +605,11 @@
             if (!query) { resultsDiv.innerHTML = ''; return; }
 
             searchTimeout = setTimeout(async () => {
-                const res = await fetch(`http://localhost:3000/users/search?q=${query}`);
+                const res = await fetch(`http://localhost:3000/users/search?q=${query}`,{
+                    headers: {
+                        'Authorization': 'Bearer ' + token // ⚡️ 亮证
+                    }
+                });
                 const users = await res.json();
 
                 resultsDiv.innerHTML = users.map(user => {
@@ -647,7 +664,10 @@
             try {
                 const res = await fetch('http://localhost:3000/friends/request', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('userToken')
+                    },
                     body: JSON.stringify({ requester: CURRENT_USER, receiver: targetName })
                 });
                 const data = await res.json();
@@ -672,7 +692,11 @@
         }
 
         async function loadInbox() {
-            const res = await fetch(`http://localhost:3000/friends/pending?username=${CURRENT_USER}`);
+            const res = await fetch(`http://localhost:3000/friends/pending`, {
+                headers: {
+                    'Authorization': 'Bearer ' + localStorage.getItem('userToken')
+                }
+            });
             const requests = await res.json();
 
             // 更新按钮上的数字
@@ -701,7 +725,10 @@
             try {
                 const res = await fetch('http://localhost:3000/friends/response', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('userToken')
+                    },
                     body: JSON.stringify({ id, action })
                 });
                 const data = await res.json();
