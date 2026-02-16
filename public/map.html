@@ -2,8 +2,17 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>我的地图笔记</title>
+    <title>MapPin - By Garvofadge</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-light.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    
     <style>
         /* 地图全屏 */
         body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
@@ -144,9 +153,18 @@
 </head>
 <body>
     
-    <div id="user-display"></div>
-    
     <div id="map"></div>
+
+    <div id="user-profile" style="position:absolute; top:20px; right:20px; z-index:1000; text-align:right;">
+        <img id="my-avatar" src="/uploads/avatars/default-avatar.png" 
+             style="width:50px; height:50px; border-radius:50%; border:2px solid white; box-shadow:0 2px 5px rgba(0,0,0,0.3); cursor:pointer;"
+             onclick="document.getElementById('avatar-input').click()" 
+             title="点击更换头像">
+        
+        <input type="file" id="avatar-input" accept="image/*" style="display:none;" onchange="openCropModal(this)">
+        
+        <div id="my-username" style="background:rgba(255,255,255,0.8); padding:2px 5px; border-radius:4px; font-weight:bold; display:inline-block; margin-top:5px;">Loading...</div>
+    </div>
 
     <div id="search-container">
         <input type="text" id="user-search" placeholder="🔍 搜索用户..." oninput="searchUsers()">
@@ -182,6 +200,21 @@
         </div>
     </div>
 
+    <div id="crop-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
+        <div style="background:white; padding:20px; border-radius:8px; width:90%; max-width:500px; max-height:80vh; display:flex; flex-direction:column;">
+            <h3 style="margin:0 0 10px 0;">裁剪头像</h3>
+            
+            <div style="height:300px; width:100%; background:#f0f0f0; overflow:hidden;">
+                <img id="crop-image" style="max-width:100%;">
+            </div>
+            
+            <div style="margin-top:15px; text-align:right;">
+                <button onclick="closeCropModal()" style="padding:8px 15px; margin-right:10px;">取消</button>
+                <button onclick="confirmCrop()" style="padding:8px 15px; background:#28a745; color:white; border:none; border-radius:4px;">✅ 确认上传</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -195,8 +228,6 @@
             alert("请先登录！");
             window.location.href = 'login.html';
         }
-
-        document.getElementById('user-display').innerText = "当前用户: " + CURRENT_USER;
 
         // A. 初始化地图 (设置中心点为SEU，缩放级别 10)
         const map = L.map('map',{ doubleClickZoom: false }).setView([31.8889, 118.8142], 10);
@@ -345,15 +376,46 @@
 
         // --- 辅助函数 :渲染只读模式---
         function renderReadMode(note) {
+            // 获取 Token
+            const token = localStorage.getItem('userToken');
+            
+            // ⚡️ 核心黑科技: 给图片/视频 URL 加上 Token 后缀
+            // 我们用正则替换: 把 /uploads/resources/xxx 变成 /uploads/resources/xxx?token=...
+            let processedContent = note.content;
+            
+            if (token) {
+                // 正则解释: 匹配 /uploads/resources/ 后面跟着任意非空字符
+                // 排除掉已经带了 ?token 的 (防止重复添加)
+                const regex = /(\/uploads\/resources\/[^\s\)\"\']+)/g;
+                
+                processedContent = processedContent.replace(regex, (match) => {
+                    // 如果已经有 ? 了 (比如文件名里带?)，用 & 连接，否则用 ?
+                    const separator = match.includes('?') ? '&' : '?';
+                    return `${match}${separator}token=${token}`;
+                });
+            }
+
+            // 1. 把 Markdown 转换成 HTML
+            // 比如: "# 标题" 变成 "<h1>标题</h1>"
+            const rawHtml = marked.parse(processedContent);
+
+            // ⚡️ 允许 video 和 audio 标签，以及它们的 src, controls 等属性
+            const cleanHtml = DOMPurify.sanitize(rawHtml, {
+                ADD_TAGS: ['video', 'audio', 'source'],
+                ADD_ATTR: ['src', 'controls', 'width', 'height', 'preload', 'type']
+            });
+
             document.getElementById('card-content').innerHTML = `
                <h2 id="card-title">${note.title}</h2>
                <div class="meta-info">
                     <span>${note.username}</span> | 
                     <span>${new Date(note.created_at).toLocaleDateString()}</span>
                 </div>
-                <div id="card-body" style="white-space: pre-wrap;">${note.content}</div>
+                <div id="card-body" class="markdown-body" style="margin-top:15px; line-height:1.6;">
+                    ${cleanHtml}
+                </div>
 
-                <div id="card-footer" style="margin-top: 20px; border-top: 1px solid #eee; pading-top: 10px;">
+                <div id="card-footer" style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 10px;">
                     ${getFooterButtons(note)}
                 </div>
             `;
@@ -416,15 +478,22 @@
             const popupContent = `
                 <div class="note-form">
                     <h3>写笔记</h3>
-                    <input id="note-title" placeholder="标题" />
+                    <input id="note-title" placeholder="标题" style="margin-bottom:5px; width:100%;">
                     
                     <select id="note-visibility" style="width:100%; margin-bottom:5px; padding:5px;">
                         <option value="public">🌍 公开 (所有人可见)</option>
                         <option value="friends">🤝 好友 (仅互关好友)</option>
                         <option value="private">🔒 私密 (仅自己可见)</option>
                     </select>
+
+                    <div style="margin-bottom: 5px; background: #f8f9fa; padding: 5px; border-radius: 4px;">
+                        <button onclick="document.getElementById('create-file-input').click()" style="cursor:pointer; border:1px solid #ddd; background:white; padding:2px 8px; border-radius:4px;">
+                            🖼️ 插入图片/视频
+                        </button>
+                        <input type="file" id="create-file-input" hidden onchange="handleFileUpload(this, 'note-content')">
+                    </div>
                     
-                    <textarea id="note-content" placeholder="内容..." rows="3"></textarea>
+                    <textarea id="note-content" placeholder="支持 Markdown..." rows="5" style="width:100%;"></textarea>
                     <button onclick="saveNote(${lat}, ${lng})">发布</button>
                 </div>
             `;
@@ -439,8 +508,8 @@
 
         // --- E. 保存笔记功能 ---
         async function saveNote(lat, lng) {
-            const title = document.getElementById('note-title').value;
-            const content = document.getElementById('note-content').value;
+            const rawTitle = document.getElementById('note-title').value;
+            const rawContent = document.getElementById('note-content').value;
             const visibility = document.getElementById('note-visibility').value;
 
             // 从浏览器缓存拿 Token
@@ -453,7 +522,7 @@
                 return;
             }
 
-            if (!title) return alert("标题不能为空");
+            if (!rawTitle) return alert("标题不能为空");
 
             // 发送给后端
             const res = await fetch('http://localhost:3000/notes', {
@@ -462,17 +531,16 @@
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer ' + token 
                 },
-                body: JSON.stringify({ title, content, lat, lng, visibility })
+                body: JSON.stringify({ title: rawTitle, content: rawContent, lat, lng, visibility })
             });
 
             const data = await res.json();
+
             if (data.success) {
                 // 关闭弹窗
                 map.closePopup();
-                // 添加一个正式的标记
-                L.marker([lat, lng]).addTo(map)
-                 .bindPopup(`<b>${title}</b><br>${content}<br><small>by ${CURRENT_USER}</small>`)
-                 .openPopup();
+                loadNotes(); 
+                alert("发布成功！");
             } else {
                 alert("发布失败");
             }
@@ -499,9 +567,9 @@
                 const data = await res.json();
 
                 if(data.success) {
-                    alert("删除成功");
                     closeCard(); //关闭卡片
                     loadNotes();
+                    alert("删除成功");
                 } else {
                     alert("删除失败:" + data.message);
                 }
@@ -530,6 +598,13 @@
                     <option value="friends" ${isFriends}>🤝 好友</option>
                     <option value="private" ${isPrivate}>🔒 私密 (仅自己可见)</option>
                 </select>
+
+                <div style="margin-bottom: 5px; background: #f8f9fa; padding: 5px; border-radius: 4px;">
+                    <button onclick="document.getElementById('edit-file-input').click()" style="cursor:pointer; border:1px solid #ddd; background:white; padding:2px 8px; border-radius:4px;">
+                        🖼️ 插入图片/视频
+                    </button>
+                    <input type="file" id="edit-file-input" hidden onchange="handleFileUpload(this, 'edit-content')">
+                </div>
 
                 <div class="meta-info">正在编辑...</div>
                 <textarea id="edit-content" rows="6" style="width:100%; padding:5px;">${note.content}</textarea>
@@ -744,6 +819,247 @@
 
         // ⚡️ 页面加载时自动检查一下有没有新消息
         loadInbox();
+
+        // --- A. 加载用户信息 (头像) ---
+        async function loadUserProfile() {
+            const token = localStorage.getItem('userToken');
+            if (!token) return; // 没登录就不管了
+
+            try {
+                const res = await fetch('http://localhost:3000/users/me', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const user = await res.json();
+                
+                // 更新名字
+                document.getElementById('my-username').innerText = user.username;
+                
+                // 更新头像 (如果有的话)
+                if (user.avatar) {
+                    // 注意: user.avatar 存的是 "/uploads/xxx.jpg"
+                    // 浏览器会自动把它拼接到 http://localhost:3000 后面
+                    document.getElementById('my-avatar').src = 'http://localhost:3000' + user.avatar;
+                }
+                else {
+                    // 如果没有上传过，就用默认图
+                    document.getElementById('my-avatar').src = 'http://localhost:3000/uploads/avatars/default-avatar.png';
+                }
+            } catch (err) {
+                console.error("加载用户信息失败", err);
+            }
+        }
+
+        // --- B. 上传头像 ---
+
+
+        // async function uploadAvatar() {
+        //     const fileInput = document.getElementById('avatar-input');
+        //     const file = fileInput.files[0];
+        //     if (!file) return;
+
+        //     // ⚠️ 关键点: 发送文件必须用 FormData
+        //     const formData = new FormData();
+        //     formData.append('avatar', file); // 这里的 'avatar' 必须和后端 upload.single('avatar') 对应
+
+        //     const token = localStorage.getItem('userToken');
+
+        //     try {
+        //         const res = await fetch('http://localhost:3000/users/avatar', {
+        //             method: 'POST',
+        //             headers: {
+        //                 'Authorization': 'Bearer ' + token
+        //                 // ❌ 千万不要自己设置 'Content-Type': 'multipart/form-data' !!!
+        //                 // 浏览器会自动设置，并加上 boundary，如果你自己设了反而会报错。
+        //             },
+        //             body: formData
+        //         });
+
+        //         const data = await res.json();
+        //         if (data.success) {
+        //             // 立即更新页面上的头像
+        //             document.getElementById('my-avatar').src = 'http://localhost:3000' + data.avatarUrl;
+        //             alert("头像更换成功！");
+        //         } else {
+        //             alert("上传失败: " + data.message);
+        //         }
+        //     } catch (err) {
+        //         console.error(err);
+        //         alert("上传出错");
+        //     }
+        // }
+
+
+        let cropper; // 全局变量，存放裁剪器实例
+        const cropImage = document.getElementById('crop-image');
+        const cropModal = document.getElementById('crop-modal');
+
+        // --- 打开裁剪窗口 ---
+        function openCropModal(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            // 检查大小 (前端先拦一次，后端再拦一次双重保险)
+            if (file.size > 5 * 1024 * 1024) {
+                alert("图片太大了！请上传 5MB 以内的图片");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // 1. 把读取到的图片放进 img 标签
+                cropImage.src = e.target.result;
+                
+                // 2. 显示模态框
+                cropModal.style.display = 'flex';
+
+                // 3. 销毁旧的裁剪器 (如果存在)，防止重复
+                if (cropper) { cropper.destroy(); }
+
+                // 4. 初始化 Cropper
+                cropper = new Cropper(cropImage, {
+                    aspectRatio: 1 / 1, // 锁定 1:1 比例
+                    viewMode: 1,        // 限制裁剪框不能移出图片范围
+                    dragMode: 'move',   // 允许拖拽图片
+                    autoCropArea: 0.8,  // 默认裁剪区域大小
+                });
+            };
+            reader.readAsDataURL(file);
+            
+            // 清空 input，否则选同一张图不会触发 onchange
+            input.value = ''; 
+        }
+
+        // --- 2. 关闭裁剪窗口 ---
+        function closeCropModal() {
+            cropModal.style.display = 'none';
+            if (cropper) cropper.destroy();
+        }
+
+        // --- 3. 确认裁剪并上传 ---
+        function confirmCrop() {
+            if (!cropper) return;
+
+            // 获取裁剪后的 Canvas
+            // width: 300 限制最终图片大小为 300x300，既节省流量又保证清晰度
+            const canvas = cropper.getCroppedCanvas({
+                width: 1000, 
+                height: 1000
+            });
+
+            // 把 Canvas 转成 Blob (二进制文件对象)
+            canvas.toBlob(async (blob) => {
+                // 接下来就和之前的上传逻辑一样了！
+                const formData = new FormData();
+                // 给 Blob 起个名字，比如 avatar.jpg
+                formData.append('avatar', blob, 'avatar.jpg');
+
+                const token = localStorage.getItem('userToken');
+
+                try {
+                    const res = await fetch('http://localhost:3000/users/avatar', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + token },
+                        body: formData
+                    });
+
+                    const data = await res.json();
+                    if (data.success) {
+                        // 更新页面显示
+                        // 加个时间戳防止浏览器缓存旧头像
+                        document.getElementById('my-avatar').src = 'http://localhost:3000' + data.avatarUrl + '?t=' + new Date().getTime();
+                        alert("头像更换成功！");
+                        closeCropModal();
+                    } else {
+                        alert("上传失败: " + data.message);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert("上传出错");
+                }
+            });
+        }
+        // 页面加载时自动获取头像
+        loadUserProfile();
+
+        // --- 处理文件选择与上传 ---
+        // inputElement: 触发事件的 input 标签
+        // textAreaId: 要插入内容的文本框 ID (因为创建和编辑是两个不同的文本框)
+        async function handleFileUpload(inputElement, textAreaId) {
+            const file = inputElement.files[0];
+            if (!file) return;
+
+            // 简单的 loading 提示
+            const textArea = document.getElementById(textAreaId);
+            const originalPlaceholder = textArea.placeholder;
+            textArea.placeholder = "正在上传中...";
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const token = localStorage.getItem('userToken');
+
+            try {
+                const res = await fetch('http://localhost:3000/api/upload', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token },
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    let insertText = '';
+                    
+                    // 根据类型生成不同的 Markdown/HTML 代码
+                    if (data.type === 'image') {
+                        // 图片: Markdown 格式
+                        insertText = `\n![${data.originalName}](${data.url})\n`;
+                    } else if (data.type === 'video') {
+                        // 视频: HTML 格式 (设置宽度 100% 适应卡片)
+                        insertText = `\n<video src="${data.url}" controls width="100%"></video>\n`;
+                    } else if (data.type === 'audio') {
+                        // 音频: HTML 格式
+                        insertText = `\n<audio src="${data.url}" controls></audio>\n`;
+                    } else {
+                        // 其他文件: 链接格式
+                        insertText = `\n[📎 下载: ${data.originalName}](${data.url})\n`;
+                    }
+
+                    // 在光标位置插入
+                    insertAtCursor(textArea, insertText);
+                    
+                } else {
+                    alert("上传失败: " + data.message);
+                }
+            } catch (err) {
+                console.error(err);
+                alert("上传出错");
+            } finally {
+                inputElement.value = ''; // 清空，允许重复传同一张
+                textArea.placeholder = originalPlaceholder;
+            }
+        }
+
+        // --- 2. 在光标处插入文本 (通用工具函数) ---
+        function insertAtCursor(myField, myValue) {
+            // IE/Edge/Chrome/Firefox 支持 selectionStart
+            if (myField.selectionStart || myField.selectionStart == '0') {
+                var startPos = myField.selectionStart;
+                var endPos = myField.selectionEnd;
+                // 插入文本
+                myField.value = myField.value.substring(0, startPos)
+                    + myValue
+                    + myField.value.substring(endPos, myField.value.length);
+                // 恢复光标位置
+                myField.selectionStart = startPos + myValue.length;
+                myField.selectionEnd = startPos + myValue.length;
+            } else {
+                myField.value += myValue;
+            }
+            // 触发一下 input 事件，防止某些框架没检测到变化 (虽然这里用不上)
+            myField.dispatchEvent(new Event('input')); 
+        }
+
+
     </script>
 </body>
 </html>

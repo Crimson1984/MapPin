@@ -3,6 +3,10 @@ const mysql = require('mysql2');
 const cors = require('cors');
 const bcrypt = require('bcryptjs'); //引入密钥库
 const jwt = require('jsonwebtoken'); // 引入 JWT 库
+const xss = require('xss'); //后端清洗 (Sanitization)
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 // 密钥：这是服务器的“私章”，绝对不能泄露给别人！
 // 在真实项目中，这个应该放在环境变量里，这里为了演示直接写死
@@ -318,15 +322,23 @@ app.post('/notes', authenticateToken, (req, res) => {
     
     // 2. 从 Token 里获取真实的用户名 (不再使用 req.body.username)
     const username = req.user.username; 
-    
     const { title, content, lat, lng, visibility } = req.body;
+
+    // 🛡️ 核心步骤: 清洗数据
+    // 如果 content 里有 <script>alert(1)</script>
+    // xss() 会把它变成 &lt;script&gt;alert(1)&lt;/script&gt; (纯文本显示，不执行)
+    const cleanTitle = xss(title);
+    //const cleanContent = xss(content);
+    const cleanContent = content; //暂时将清洗交给前端DOMPurify
+
+
     const safeVisibility = visibility || 'public';
 
-    console.log(`[安全操作] 用户 ${username} 正在发布笔记...`);
+    console.log(`[发布笔记] 用户 ${username} 正在发布笔记...`);
 
     const sql = 'INSERT INTO notes (username, title, content, lat, lng, visibility) VALUES (?, ?, ?, ?, ?, ?)';
     
-    db.query(sql, [username, title, content, lat, lng, safeVisibility], (err, result) => {
+    db.query(sql, [username, cleanTitle, cleanContent, lat, lng, safeVisibility], (err, result) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ success: false, message: '发布失败' });
@@ -342,7 +354,7 @@ app.post('/notes', authenticateToken, (req, res) => {
 });
 
 
-// --- 删除笔记 ---
+// --- 删除笔记 (带文件清理版)---
 // 路径中的id是一个占位符
 app.delete('/notes/:id', authenticateToken, (req,res) => { //加安检
     //强制把 id 转为数字 (防止字符串匹配失败)
@@ -351,10 +363,10 @@ app.delete('/notes/:id', authenticateToken, (req,res) => { //加安检
 
 
     // [调试] 在终端打印接收到的数据
-    console.log(`[安全删除] 用户 ${username} 尝试删除笔记 ${noteId}`);
+    console.log(`[删除] 用户 ${username} 尝试删除笔记 ${noteId}`);
 
     //安全检查:查看这条笔记是否是此人写的
-    const checkSql = ' SELECT username FROM notes WHERE id = ?';
+    const checkSql = 'SELECT * FROM notes WHERE id = ?';
     db.query(checkSql, [noteId], (err, results) => {
         if (err) {
             console.error('[错误] 数据库查询出错:', err);
@@ -375,6 +387,29 @@ app.delete('/notes/:id', authenticateToken, (req,res) => { //加安检
             console.log(`[拒绝] 权限不足。笔记归属: ${note.username}, 请求者: ${username}`);
             return res.status(403).json({ success: false, message: '你无权删除这条笔记！' });
         }
+
+        // --- 🧹 开始清理文件 ---
+        // 正则表达式: 匹配 Markdown 图片/链接 中的路径
+        // 目标格式: /uploads/resources/xxxx/xx/xxx.jpg
+        const regex = /\/uploads\/resources\/[\w\-\.\/]+/g;
+        const filePaths = note.content.match(regex); // 找出一共有几个附件
+
+        if (filePaths) {
+            filePaths.forEach(webPath => {
+                // webPath 是 "/uploads/resources/..."
+                // 我们要把它转回硬盘绝对路径: D:\project\uploads\resources\...
+                // path.join(__dirname, webPath) 会自动处理斜杠问题
+                // 注意: webPath 开头有个 /, path.join 可能会把它当根目录，最好去掉开头的 /
+                const diskPath = path.join(__dirname, webPath.substring(1)); // substring(1) 去掉开头的 /
+                
+                // 物理删除 (如果不报错就删，报错(比如文件早没了)就忽略)
+                fs.unlink(diskPath, (err) => {
+                    if (err) console.error(`[清理失败] ${diskPath}:`, err.message);
+                    else console.log(`[清理成功] ${diskPath}`);
+                });
+            });
+        }
+        // --- 清理结束 ---
 
         //通过验证
         const deleteSql = 'DELETE FROM notes WHERE id = ?';
@@ -398,6 +433,11 @@ app.put('/notes/:id', authenticateToken, (req,res) =>{
 
     console.log(`[修改请求]用户 ${username} 尝试修改笔记 ${noteId}`);
 
+    // 🛡️ 清洗
+    const cleanTitle = xss(title);
+    //const cleanContent = xss(content);
+    const cleanContent = content; //暂时将清洗交给前端DOMPurify
+
     //验证权限
     const checkSql = 'SELECT username FROM notes WHERE id = ?';
     db.query(checkSql, [noteId], (err, results) =>{
@@ -411,7 +451,7 @@ app.put('/notes/:id', authenticateToken, (req,res) =>{
 
         //鉴权成功
         const updateSql = 'UPDATE notes SET title = ?,content = ?,visibility = ? WHERE id = ?';
-        db.query(updateSql, [title, content, visibility, noteId], (err,result) => {
+        db.query(updateSql, [cleanTitle, cleanContent, visibility, noteId], (err,result) => {
             if(err) {
                 console.error('更新失败', err);
                 return res.status(500).json({ success: false, message: '更新失败'});
@@ -516,7 +556,211 @@ app.put('/friends/response', authenticateToken, (req, res) => {
     });
 });
 
+// --- 配置静态资源服务 ---
+// 只公开 avatars 文件夹
+// 访问 /uploads/avatars/xxx.jpg -> 直接给看
+//对于/uploads/resources/里的文件,使用动态接口提供
+app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads/avatars')));
 
+// --- 配置 Multer 存储引擎 ---
+// --- 智能存储引擎: 自动按月分类 ---
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        let uploadPath = 'uploads/';
+
+        // 1. 根据 fieldname 决定去哪个大类
+        // 头像去 avatars，其他去 resources
+        if (file.fieldname === 'avatar') {
+            uploadPath += 'avatars/';
+        } else {
+            // 2. 笔记资源按日期归档: uploads/resources/2026/02/
+            const date = new Date();
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            
+            uploadPath += `resources/${year}/${month}/`;
+        }
+
+        // 3. 检查文件夹是否存在，不存在则创建 (递归创建)
+        // sync 是同步方法，但在配置阶段用没问题
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+        }
+
+        cb(null, uploadPath);
+    },
+    filename: function (req, file, cb) {
+        // 保持文件名唯一性
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, uniqueSuffix + ext);
+    }
+});
+
+// 配置 multer
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 50 * 1024 * 1024 } // 资源文件限制放宽到 50MB (为了视频)
+});
+
+// --- 通用文件上传接口 (笔记附件) ---
+// upload.single('file') 表示接收字段名为 'file' 的文件
+app.post('/api/upload', authenticateToken, upload.single('file'), (req, res) => {
+
+    const currentUser = req.user.username; 
+    console.log(`[上传文件] 用户 ${currentUser} 正在上传文件...`);
+
+    if (!req.file) {
+        console.log(`[上传文件] 用户 ${currentUser} 未选择文件❓`);
+        return res.status(400).json({ success: false, message: '未选择文件' });
+    }
+
+// ⚡️ 修正核心: 将硬盘绝对路径转换为 Web 相对路径
+    // 1. 获取相对于项目根目录的路径 (去掉 D:\project\...)
+    // 结果可能是 "uploads\resources\2026\02\xxx.jpg"
+    const relativePath = path.relative(__dirname, req.file.path);
+    
+    // 2. 把 Windows 的反斜杠 "\" 替换为 Web 的正斜杠 "/"
+    // 3. 加上开头的 "/"
+    // 结果变成 "/uploads/resources/2026/02/xxx.jpg"
+    const fileUrl = '/' + relativePath.replace(/\\/g, '/');
+
+    // 识别文件类型 (image, video, audio)
+    const mimeType = req.file.mimetype;
+    let type = 'file';
+    if (mimeType.startsWith('image/')) type = 'image';
+    else if (mimeType.startsWith('video/')) type = 'video';
+    else if (mimeType.startsWith('audio/')) type = 'audio';
+
+    console.log(`[上传文件] 用户 ${currentUser} 上传${type} 🟢路径:${fileUrl}`);
+
+    res.json({ 
+        success: true, 
+        url: fileUrl, 
+        type: type, 
+        originalName: req.file.originalname 
+    });
+});
+
+
+// --- 上传头像接口 ---
+// upload.single('avatar') 表示接收一个字段名为 'avatar' 的文件
+app.post('/users/avatar', authenticateToken, upload.single('avatar'), (req, res) => {
+
+    const currentUser = req.user.username; 
+    console.log(`[上传头像] 用户 ${currentUser} 正在上传头像...`);
+    
+    // 1. 如果没有文件被上传
+    if (!req.file) {
+        console.log(`[上传头像] 用户 ${currentUser} 未选择文件❓`);
+        return res.status(400).json({ success: false, message: '请选择一张图片' });
+    }
+
+    const userId = req.user.id;
+
+    // ⚡️ 修正: 同样使用 path.relative 自动计算正确路径
+    // 这样无论它被存到 uploads/ 还是 uploads/avatars/ 都能生成正确的 URL
+    const relativePath = path.relative(__dirname, req.file.path);
+    const fileUrl = '/' + relativePath.replace(/\\/g, '/');
+
+    // 更新数据库
+    const sql = 'UPDATE users SET avatar = ? WHERE id = ?';
+    db.query(sql, [fileUrl, userId], (err, result) => {
+        if (err) {
+            console.error(err);
+            console.log(`[上传头像] 用户 ${currentUser} 上传失败❌`);
+            return res.status(500).json({ success: false, message: '数据库更新失败' });
+        }
+        console.log(`[上传头像] 用户 ${currentUser} 上传头像成功✅${fileUrl}`);
+        res.json({ success: true, message: '头像上传成功', avatarUrl: fileUrl });
+    });
+});
+
+// --- 获取当前用户信息 (包含头像) ---
+// 为了让前端知道显示什么头像，我们需要一个获取"我自己"信息的接口
+app.get('/users/me', authenticateToken, (req, res) => {
+    const sql = 'SELECT id, username, avatar FROM users WHERE id = ?';
+    db.query(sql, [req.user.id], (err, results) => {
+        if (err || results.length === 0) return res.status(404).json({ message: '用户不存在' });
+        res.json(results[0]);
+    });
+});
+
+// --- 全局错误处理中间件 ---
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        // Multer 报错 (比如文件太大)
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ success: false, message: '文件太大！请上传 5MB 以内的图片' });
+        }
+    }
+    next(err);
+});
+
+
+// --- 🔐 安全资源访问接口 (最终修复版) ---
+app.get('/uploads/resources/*filepath', (req, res) => {
+    
+    // ⚡️ 修复核心: 处理数组类型的路径参数
+    let relativePath = req.params.filepath;
+    if (Array.isArray(relativePath)) {
+        relativePath = relativePath.join('/'); // 把 ['2026', '02', 'x.png'] 变成 "2026/02/x.png"
+    }
+
+    // 构造数据库查询路径
+    const dbStoredPath = `/uploads/resources/${relativePath}`;
+
+    // 获取 Token
+    const token = req.query.token || (req.headers['authorization'] && req.headers['authorization'].split(' ')[1]);
+
+    if (!token) return res.status(401).send('无权访问: 请登录');
+
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.status(403).send('无权访问: Token 无效');
+        
+        const currentUsername = user.username;
+
+        // SQL 查询
+        const sql = `
+            SELECT n.*, f.status as friend_status
+            FROM notes n
+            LEFT JOIN friendships f ON 
+                (f.requester = ? AND f.receiver = n.username) OR 
+                (f.requester = n.username AND f.receiver = ?)
+            WHERE n.content LIKE ? 
+            LIMIT 1
+        `;
+        
+        db.query(sql, [currentUsername, currentUsername, `%${dbStoredPath}%`], (dbErr, results) => {
+            if (dbErr || results.length === 0) {
+                return res.status(404).send('资源未找到或无权访问'); 
+            }
+
+            const note = results[0];
+            let isAllowed = false;
+
+            if (note.username === currentUsername) isAllowed = true;
+            else if (note.visibility === 'public') isAllowed = true;
+            else if (note.visibility === 'friends' && note.friend_status === 'accepted') isAllowed = true;
+
+            if (isAllowed) {
+                // 发送文件
+                const absolutePath = path.join(__dirname, 'uploads', 'resources', relativePath);
+                if (fs.existsSync(absolutePath)) {
+                    res.sendFile(absolutePath);
+                } else {
+                    res.status(404).send('文件实体丢失');
+                }
+            } else {
+                res.status(403).send('无权访问此资源');
+            }
+        });
+    });
+});
+
+
+// ⚡️ 2. 新增: 托管前端网页 (public 文件夹)
+app.use(express.static(path.join(__dirname, 'public')));
 
 // --- 启动服务器 ---
 app.listen(3000, ()=>{
