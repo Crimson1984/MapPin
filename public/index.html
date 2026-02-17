@@ -2,62 +2,44 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MapPin - 注册</title>
+    <!-- <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"> -->
+    <link rel="stylesheet" href="./lib/material-icons/material-icons.css">
+    <link rel="stylesheet" href="./css/style.css">
     <style>
-        body { font-family: sans-serif; padding: 50px; }
-        .box { border: 1px solid #ccc; padding: 20px; width: 300px; }
-        input { display: block; margin-bottom: 10px; width: 100%; padding: 8px; }
-        button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        #message { margin-top: 10px; color: red; }
+        body { display: flex; align-items: center; justify-content: center; height: 100vh; }
+        .auth-container { width: 100%; max-width: 320px; }
+        .spin { animation: spin 1s infinite linear; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
-    <div class="box">
-        <h2>用户注册</h2>
-        <input type="text" id="username" placeholder="请输入用户名">
-        <input type="password" id="password" placeholder="请输入密码">
-        <button onclick="doRegister()">立即注册</button>
-        <div id="message"></div>
+    <div class="card auth-container" style="padding: 30px;">
+        <h2 style="text-align:center; color:var(--primary-color); margin-bottom:20px;">
+            <span class="material-icons" style="font-size:36px;">person_add</span><br>
+            用户注册
+        </h2>
+
+        <div class="input-group">
+            <input type="text" id="username" class="form-control" placeholder="设置用户名">
+        </div>
+        <div class="input-group">
+            <input type="password" id="password" class="form-control" placeholder="设置密码">
+        </div>
+
+        <button onclick="doRegister()" class="btn btn-primary" style="width:100%; margin-top:10px;">
+            <span class="material-icons">how_to_reg</span> 立即注册
+        </button>
+        
+        <div style="margin-top:15px; text-align:center; font-size:14px; color:var(--text-secondary);">
+            已有账号? <a href="login.html" style="color:var(--primary-color); text-decoration:none; font-weight:bold;">去登录</a>
+        </div>
+
+        <div id="message" style="margin-top: 15px; text-align: center; font-size: 14px; min-height: 20px;"></div>
     </div>
 
-    <script>
-        async function doRegister() {
-            // 1. 获取输入框的值
-            const u = document.getElementById('username').value;
-            const p = document.getElementById('password').value;
-
-            if(!u || !p) {
-                alert("账号密码不能为空！");
-                return;
-            }
-
-            // 2. 发送请求给 Node.js 后端
-            try {
-                const response = await fetch('http://localhost:3000/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: u, password: p })
-                });
-
-                const data = await response.json();
-
-                // 3. 显示结果
-                const msgDiv = document.getElementById('message');
-                if (data.success) {
-                    msgDiv.style.color = 'green';
-                    msgDiv.innerText = '✅ ' + data.message;
-                } else {
-                    msgDiv.style.color = 'red';
-                    msgDiv.innerText = '❌ ' + data.message;
-                }
-
-            } catch (err) {
-                console.error(err);
-                alert("请求失败，请检查服务器是否开启");
-            }
-        }
-    </script>
+    <script type="module" src="./js/auth.js"></script>
 </body>
 </html>

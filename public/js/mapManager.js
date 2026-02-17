@@ -41,8 +41,8 @@ export function addMarker(note, onClickCallback) {
 
     // 创建自定义 Icon (整合了你原来的逻辑)
     const myIcon = L.icon({
-        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconUrl: '/lib/leaflet/images/marker-icon.png',
+        shadowUrl: '/lib/leaflet/images/marker-shadow.png',
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         popupAnchor: [1, -34],

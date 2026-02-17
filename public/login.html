@@ -3,52 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <title>登录</title>
+    <!-- <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"> -->
+    <link rel="stylesheet" href="./lib/material-icons/material-icons.css">
+    <link rel="stylesheet" href="./css/style.css">
     <style>
-        body { display: flex; justify-content: center; align-items: center; height: 100vh; background: #f0f2f5; font-family: sans-serif; }
-        .box { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 300px; }
-        input { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: #28a745; color: white; border: none; cursor: pointer; }
-        button:hover { background: #218838; }
-        .link { margin-top: 10px; text-align: center; font-size: 14px; }
+        body { display: flex; align-items: center; justify-content: center; height: 100vh; }
+        .auth-container { width: 100%; max-width: 320px; }
+        /* 简单的旋转动画 */
+        .spin { animation: spin 1s infinite linear; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h2 style="text-align:center">登录地图笔记</h2>
-        <input type="text" id="username" placeholder="用户名">
-        <input type="password" id="password" placeholder="密码">
-        <button onclick="login()">登录</button>
-        <div class="link">
-            没有账号? <a href="index.html">去注册</a>
+    <div class="card auth-container" style="padding: 30px;">
+        <h2 style="text-align:center; color:var(--primary-color); margin-bottom:20px;">
+            <span class="material-icons" style="font-size:32px;">map</span><br>登录 MapPin
+        </h2>
+        
+        <div class="input-group">
+            <input type="text" id="username" class="form-control" placeholder="用户名">
         </div>
+        <div class="input-group">
+            <input type="password" id="password" class="form-control" placeholder="密码">
+        </div>
+        
+        <button onclick="login()" class="btn btn-primary" style="width:100%; margin-top:10px;">登录</button>
+        
+        <div class="link" style="margin-top:15px; text-align:center; font-size:14px; color:var(--text-secondary);">
+            没有账号? <a href="index.html" style="color:var(--primary-color); text-decoration:none; font-weight:bold;">去注册</a>
+        </div>
+
+        <div id="message" style="margin-top: 15px; text-align: center; font-size: 14px; min-height: 20px;"></div>
     </div>
 
-    <script>
-        async function login() {
-            const u = document.getElementById('username').value;
-            const p = document.getElementById('password').value;
-
-            const res = await fetch('http://localhost:3000/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: u, password: p })
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-                // 1. 存用户名 (用于显示 "欢迎, xxx")
-                localStorage.setItem('currentUser', data.username);
-                
-                // 2. ⚡️ 存 Token (用于证明身份)
-                localStorage.setItem('userToken', data.token);
-                
-                alert("登录成功！跳转中...");
-                window.location.href = 'map.html';
-            } else {
-                alert(data.message);
-            }
-        }
-    </script>
+    <script type="module" src="./js/auth.js"></script>
 </body>
 </html>

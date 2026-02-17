@@ -7,16 +7,17 @@
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
 
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-light.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
-
+    <link rel="stylesheet" href="./lib/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="./lib/marked/github-markdown-light.min.css">
+    <link rel="stylesheet" href="./lib/cropper/cropper.min.css">
+    <!-- //<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"> -->
+    <link rel="stylesheet" href="./lib/material-icons/material-icons.css">
     <link rel="stylesheet" href="./css/style.css">
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script src="./lib/leaflet/leaflet.js"></script>
+    <script src="./lib/marked/marked.min.js"></script>
+    <script src="./lib/dompurify/purify.min.js"></script>
+    <script src="./lib/cropper/cropper.min.js"></script>
 </head>
 <body>
     
@@ -25,31 +26,32 @@
     <div id="user-profile" style="position:absolute; top:20px; right:20px; z-index:1000; text-align:right; display:flex; flex-direction:column; align-items:flex-end;">
         
         <img id="my-avatar" src="/uploads/avatars/default-avatar.png" 
-             style="width:50px; height:50px; border-radius:50%; border:2px solid white; box-shadow:0 2px 5px rgba(0,0,0,0.3); cursor:pointer; background: white;"
+             class="avatar avatar-md"
+             style="cursor:pointer; background: white;"
              onclick="document.getElementById('avatar-input').click()" 
              title="点击更换头像">
         
         <input type="file" id="avatar-input" accept="image/*" hidden 
                onchange="window.handleAvatarSelected(this)">
         
-        <div id="my-username" style="background:rgba(255,255,255,0.9); padding:4px 8px; border-radius:4px; font-weight:bold; margin-top:5px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">Loading...</div>
+        <div id="my-username" style="background:rgba(255,255,255,0.9); padding:4px 8px; border-radius:4px; font-weight:bold; margin-top:5px; box-shadow: var(--shadow-sm);">Loading...</div>
     </div>
 
     <div id="search-container">
-        <input type="text" id="user-search" placeholder="🔍 搜索用户..." autocomplete="off">
+        <input type="text" id="user-search" class="form-control" placeholder="🔍 搜索用户..." autocomplete="off">
         
         <div id="search-results"></div> 
 
         <div id="visiting-banner" style="display:none;">
             <span>正在浏览: <b id="visit-name"></b></span>
-            <button onclick="window.exitVisitMode()">退出访问</button>
+            <button class="btn btn-secondary" onclick="window.exitVisitMode()" style="padding: 2px 8px; font-size: 12px;">退出访问</button>
         </div>
 
         <div style="margin-top: 10px; position: relative;">
-            <button id="inbox-btn" onclick="window.toggleInbox()" 
-                    style="width:100%; padding:8px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-                <span>📩 好友请求</span>
-                <span id="request-count" style="background:rgba(0,0,0,0.2); padding:0 5px; border-radius:10px; font-size:12px;">(0)</span>
+            <button id="inbox-btn" class="btn btn-secondary" onclick="window.toggleInbox()" 
+                    style="width:100%; justify-content:space-between;">
+                <span class="flex-center"><span class="material-icons" style="font-size:16px;">mail</span> 好友请求</span>
+                <span id="request-count" style="background:rgba(0,0,0,0.1); padding:0 6px; border-radius:10px; font-size:12px;">(0)</span>
             </button>
             
             <div id="inbox-list" style="display:none;"></div>
@@ -57,7 +59,7 @@
     </div>
 
     <div id="floating-card" class="hidden">
-        <button class="close-btn" onclick="window.closeCard()">×</button>
+        <button class="close-btn material-icons" onclick="window.closeCard()">close</button>
         
         <div id="card-content">
             <h2 id="card-title">标题</h2>
@@ -75,8 +77,10 @@
             </div>
             
             <div style="margin-top:20px; text-align:right; display:flex; justify-content:flex-end; gap:10px;">
-                <button onclick="window.cancelCrop()" style="padding:8px 20px; border:1px solid #ddd; background:white; border-radius:4px; cursor:pointer;">取消</button>
-                <button onclick="window.saveAvatar()" style="padding:8px 20px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer;">✅ 确认上传</button>
+                <button onclick="window.cancelCrop()" class="btn btn-secondary">取消</button>
+                <button onclick="window.saveAvatar()" class="btn btn-primary">
+                    <span class="material-icons">check</span> 确认上传
+                </button>
             </div>
         </div>
     </div>

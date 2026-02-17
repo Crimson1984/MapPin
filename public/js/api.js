@@ -64,6 +64,23 @@ async function request(endpoint, options = {}) {
 
 // --- 导出 API 方法 ---
 export const API = {
+    // 登录接口
+    async login(username, password) {
+        return request('/login', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+        });
+    },
+
+    // 注册接口
+    async register(username, password) {
+        return request('/register', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+        });
+    },
+
+
     // 笔记相关
     getNotes: (targetUser = null) => {
         let path = '/notes'; // 建议变量名叫 path，避免混淆

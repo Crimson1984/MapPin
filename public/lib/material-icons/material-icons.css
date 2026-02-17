@@ -1,0 +1,31 @@
+/* public/lib/material-icons/material-icons.css */
+
+/* 1. 定义字体 (告诉浏览器字体文件在哪) */
+@font-face {
+  font-family: 'Material Icons';
+  font-style: normal;
+  font-weight: 400;
+  /* 这里 url() 里的名字必须和你放入的字体文件名完全一致 */
+  src: url(MaterialIcons-Regular.woff2) format('woff2');
+}
+
+/* 2. 定义样式类 (让 <span class="material-icons"> 生效) */
+.material-icons {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;  /* 默认大小 */
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+
+  /* 渲染优化 */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'liga';
+}

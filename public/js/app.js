@@ -171,27 +171,35 @@ function onMapDoubleClick(e) {
     // 弹出 Leaflet 原生 Popup (或者你也改成用侧边栏)
     // 这里演示如何解决 onclick 问题
     const popupContent = `
-        <div class="note-form" style="min-width: 250px;">
-            <h3 style="margin-top:0;">写笔记</h3>
+        <div class="note-form" style="min-width: 260px;">
+            <h3 style="margin-top:0; font-size:1.1em; border-bottom:1px solid #eee; padding-bottom:5px;">
+                <span class="material-icons" style="font-size:18px; color:var(--primary-color);">edit_location</span> 新建笔记
+            </h3>
             
-            <input id="note-title" placeholder="标题" style="width:100%; margin-bottom:8px; padding:5px;">
+            <div class="input-group" style="margin-bottom: 2px;">
+                <input id="note-title" class="form-control" placeholder="给笔记起个标题...">
+            </div>
             
-            <select id="note-visibility" style="width:100%; margin-bottom:8px; padding:5px;">
-                <option value="public">🌍 公开 (Public)</option>
-                <option value="friends">👥 仅好友 (Friends)</option>
-                <option value="private">🔒 仅自己 (Private)</option>
-            </select>
+            <div class="input-group" style="margin-bottom: 3px;">
+                <select id="note-visibility" class="form-control">
+                    <option value="public">🌍 公开</option>
+                    <option value="friends">🤝 仅好友</option>
+                    <option value="private">🔒 仅自己</option>
+                </select>
+            </div>
 
-            <div style="margin-bottom:8px;">
-                <label style="font-size:12px; cursor:pointer; color:blue;">
-                    🖼️ 插入图片/视频
+            <div style="margin-bottom:5px;">
+                <label class="btn btn-secondary" style="width:50%; box-sizing:border-box; justify-content:space-around;">
+                    <span class="material-icons">attach_file</span> 插入附件
                     <input type="file" onchange="window.handleUpload(this, 'note-content')" hidden>
                 </label>
             </div>
 
-            <textarea id="note-content" placeholder="支持 Markdown..." rows="4" style="width:100%; margin-bottom:8px;"></textarea>
+            <textarea id="note-content" class="form-control" placeholder="写点什么..." rows="3" style="margin-bottom:10px;"></textarea>
             
-            <button onclick="window.saveNewNote(${lat}, ${lng})" style="width:100%; background:#007bff; color:white; border:none; padding:8px; cursor:pointer;">发布</button>
+            <button onclick="window.saveNewNote(${lat}, ${lng})" class="btn btn-primary" style="width:100%;">
+                <span class="material-icons">send</span> 发布
+            </button>
         </div>
     `;
     

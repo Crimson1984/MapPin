@@ -11,8 +11,12 @@ function getFooterButtons(note) {
     if (currentUsername && note.username === currentUsername) {
         return `
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                <button onclick="window.enableEditMode(${note.id})" class="btn-edit">✏️ 编辑</button>
-                <button onclick="window.deleteNote(${note.id})" class="btn-delete">🗑️ 删除</button>
+                <button onclick="window.enableEditMode(${note.id})" class="btn btn-secondary">
+                    <span class="material-icons">edit</span> 编辑
+                </button>
+                <button onclick="window.deleteNote(${note.id})" class="btn btn-danger">
+                    <span class="material-icons">delete</span> 删除
+                </button>
             </div>
         `;
     }
@@ -61,55 +65,6 @@ export function renderReadMode(note) {
 
 
 // 显示悬浮卡片
-// export function showFloatingCard(note) {
-//     const card = document.getElementById('floating-card');
-//     // 假设卡片里有一个专门放内容的容器，如果没有，请在 HTML 里加一个 <div id="card-content"></div>
-//     // 或者直接修改 card.innerHTML (但这会覆盖关闭按钮，建议用子容器)
-//     const contentDiv = document.getElementById('card-content') || card; 
-
-//     // 获取地图实例
-//     const map = getMap();
-//     if (!map) return;
-
-//     // --- A. 位置计算逻辑 ---
-//     // 计算标记在屏幕上的像素位置
-//     const screenPoint = map.latLngToContainerPoint([note.lat, note.lng]);
-//     const screenWidth = window.innerWidth;
-
-//     // 清除旧位置类
-//     card.classList.remove('card-left', 'card-right');
-
-//     // 判断左右: 标记在右半屏 -> 悬浮窗显示在左边
-//    try {
-//         const screenPoint = map.latLngToContainerPoint([note.lat, note.lng]);
-//         const screenWidth = window.innerWidth;
-
-//         card.classList.remove('card-left', 'card-right');
-//         if (screenPoint.x > screenWidth / 2) {
-//             card.classList.add('card-left'); // 标记在右，窗在左
-//         } else {
-//             card.classList.add('card-right'); // 标记在左，窗在右
-//         }
-//     } catch (e) {
-//         console.error("坐标计算失败，默认显示在右侧", e);
-//         card.classList.add('card-right');
-//     }
-
-//     // --- B. 数据绑定 ---
-//     // 存储当前笔记 ID，方便后续编辑/删除操作找到它
-//     card.setAttribute('data-current-note-id', note.id);
-
-//     // --- C. 内容渲染 ---
-//     // 获取 HTML 字符串并插入 DOM
-//     const htmlContent = renderReadMode(note);
-//     contentDiv.innerHTML = htmlContent;
-
-//     // --- D. 显示动画 ---
-//     card.classList.remove('hidden');
-//     // 稍微延迟一下加 active，确保过渡动画能触发（可选）
-//     setTimeout(() => card.classList.add('active'), 10);
-// }
-
 export function showFloatingCard(note, map) {
     const card = document.getElementById('floating-card');
     const contentDiv = document.getElementById('card-content');
@@ -169,29 +124,35 @@ export function renderEditMode(note) {
     // 2. 返回 HTML 字符串
     return `
         <div class="edit-mode-container">
-            <input type="text" id="edit-title" value="${note.title}" style="width:100%; font-size:1.5em; font-weight:bold; margin-bottom:5px; padding:5px; box-sizing:border-box;">
+            <div class="input-group">
+                <input type="text" id="edit-title" value="${note.title}" class="form-control" style="font-weight:bold; font-size: 1.1em;" placeholder="笔记标题">
+            </div>
             
-            <select id="edit-visibility" style="width:100%; margin-bottom:10px; padding:5px; border:1px solid #ddd; border-radius:4px;">
-                <option value="public" ${isPublic}>🌍 公开 (所有人可见)</option>
-                <option value="friends" ${isFriends}>🤝 好友</option>
-                <option value="private" ${isPrivate}>🔒 私密 (仅自己可见)</option>
-            </select>
-
-            <div style="margin-bottom: 5px; background: #f8f9fa; padding: 5px; border-radius: 4px;">
-                <button onclick="document.getElementById('edit-file-input').click()" style="cursor:pointer; border:1px solid #ddd; background:white; padding:2px 8px; border-radius:4px;">
-                    🖼️ 插入图片/视频
-                </button>
-                <input type="file" id="edit-file-input" hidden onchange="window.handleFileUpload(this, 'edit-content')">
+            <div class="input-group">
+                <select id="edit-visibility" class="form-control">
+                    <option value="public" ${isPublic}>🌍 公开 (所有人可见)</option>
+                    <option value="friends" ${isFriends}>🤝 仅好友可见</option>
+                    <option value="private" ${isPrivate}>🔒 私密 (仅自己可见)</option>
+                </select>
             </div>
 
-            <div class="meta-info" style="color:#e6a23c;">✎ 正在编辑...</div>
+            <div style="margin-bottom: 8px; display:flex; gap: 5px;">
+                <button onclick="document.getElementById('edit-file-input').click()" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;">
+                    <span class="material-icons" style="font-size:16px;">image</span> 插入附件
+                </button>
+                <input type="file" id="edit-file-input" hidden onchange="window.handleFileUpload(this, 'edit-content')">
+                <span style="font-size: 12px; color: #666; display:flex; align-items:center; margin-left:auto;">
+                    <span class="material-icons" style="font-size:14px; color:#f9ab00; margin-right:2px;">edit</span> 编辑中
+                </span>
+            </div>
             
-            <textarea id="edit-content" rows="8" style="width:100%; padding:5px; box-sizing:border-box; margin-bottom:10px;">${note.content}</textarea>
+            <textarea id="edit-content" class="form-control" rows="8" placeholder="支持 Markdown 语法...">${note.content}</textarea>
             
-            <div style="text-align: right; display: flex; justify-content: flex-end; gap: 10px;">
-                <button onclick="window.cancelEdit()" style="padding:5px 15px; cursor:pointer;">取消</button>
-                
-                <button onclick="window.saveEdit()" style="background:#28a745; color:white; padding:5px 15px; border:none; border-radius:4px; cursor:pointer;">💾 保存</button>
+            <div style="text-align: right; display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
+                <button onclick="window.cancelEdit()" class="btn btn-secondary">取消</button>
+                <button onclick="window.saveEdit()" class="btn btn-primary">
+                    <span class="material-icons">save</span> 保存
+                </button>
             </div>
         </div>
     `;
@@ -207,14 +168,14 @@ export function renderSearchResults(users, currentUsername) {
         
         // 返回列表项 HTML
         return `
-        <div class="search-item" style="display:flex; justify-content:space-between; align-items:center; padding: 5px; border-bottom: 1px solid #eee;">
-            <span onclick="window.visitUser('${user.username}')" style="cursor:pointer; flex-grow:1;">
-                👤 ${user.username}
+        <div class="search-item" style="display:flex; justify-content:space-between; align-items:center; padding: 10px; border-bottom: 1px solid var(--border-color);">
+            <span onclick="window.visitUser('${user.username}')" style="cursor:pointer; flex-grow:1; display:flex; align-items:center;">
+                <span class="material-icons" style="color:#666;">person</span> ${user.username}
             </span>
             
             <button onclick="event.stopPropagation(); window.sendFriendRequest('${user.username}')" 
-                    style="background:#28a745; color:white; border:none; border-radius:3px; padding:2px 8px; cursor:pointer; font-size:12px;">
-                ➕ 加好友
+                    class="btn btn-primary" style="padding: 2px 8px; font-size: 12px;">
+                <span class="material-icons" style="font-size:14px;">person_add</span> 加好友
             </button>
         </div>
         `;
@@ -248,17 +209,16 @@ export function renderInboxList(requests) {
     // 生成列表
     return requests.map(req => `
         <div style="padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
-            <div>
-                <b style="color:#007bff;">${req.requester}</b> 想添加你为好友
+            <div style="display:flex; align-items:center;">
+                <span class="material-icons" style="color:#007bff; margin-right:4px;">account_circle</span>
+                <b>${req.requester}</b>
             </div>
-            <div>
-                <button onclick="window.respondToRequest(${req.id}, 'accepted')" 
-                        style="background:#28a745; color:white; border:none; padding:4px 8px; cursor:pointer; margin-right:5px; border-radius:3px;">
-                    同意
+            <div style="display:flex; gap:5px;">
+                <button onclick="window.respondToRequest(${req.id}, 'accepted')" class="btn btn-icon" style="color:var(--success-color);" title="同意">
+                    <span class="material-icons">check_circle</span>
                 </button>
-                <button onclick="window.respondToRequest(${req.id}, 'rejected')" 
-                        style="background:#dc3545; color:white; border:none; padding:4px 8px; cursor:pointer; border-radius:3px;">
-                    拒绝
+                <button onclick="window.respondToRequest(${req.id}, 'rejected')" class="btn btn-icon" style="color:var(--danger-color);" title="拒绝">
+                    <span class="material-icons">cancel</span>
                 </button>
             </div>
         </div>
