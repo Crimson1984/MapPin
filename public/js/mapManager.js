@@ -1,16 +1,91 @@
 // public/js/mapManager.js
 import { Icons } from './utils.js';
 
+const TILE_LAYERS_CONFIG = {
+    osm: {
+        name: "🗺️ 标准地图 (OSM)",
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        options: { attribution: '&copy; OpenStreetMap contributors' }
+    },
+
+    satellite: {
+        name: "🛰️ 卫星影像 (Esri)",
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        options: { attribution: 'Tiles &copy; Esri' }
+    },
+
+    carto_light: {
+        name: "🏳️ 灰色 (CartoDB)",
+        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        options: { attribution: '&copy; OpenStreetMap &copy; CartoDB', subdomains: 'abcd' }
+    },
+
+    dark: {
+        name: "🌑 深色模式 (CartoDB)",
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        options: { attribution: '&copy; CartoDB' }
+    },
+    gaode: {
+        name: "🚗 高德地图 (有偏移)",
+        url: 'http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        options: { subdomains: "1234" }
+    },
+
+    // 2. [高对比] OSM 人道主义 (推荐！颜色好看)
+    osm_hot: {
+        name: "🔥 人道主义(OSM)",
+        url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+        options: { attribution: '&copy; OpenStreetMap contributors, Tiles style by Humanitarian OpenStreetMap Team hosted by OSM France' }
+    },
+
+    // 3. [功能] 骑行地图 (带等高线)
+    osm_cycle: {
+        name: "🚲 骑行与地形(OSM)",
+        url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+        options: { attribution: '&copy; CyclOSM' }
+    },
+
+    // 4. [功能] 公共交通
+    osm_transport: {
+        name: "🚇 公共交通(OSM)",
+        url: 'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png',
+        options: { attribution: '&copy; ÖPNVkarte' }
+    }
+
+};
+
+
 let map = null; // 模块内部私有变量
 let markersLayer = null; // ⚡️ 新增：用于存放所有标记的容器
 
 export function initMap() {
-    // 1. 初始化地图
-    const map = L.map('map',{ doubleClickZoom: false }).setView([31.8889, 118.8142], 10);
+    //动态生成图层对象
+    const layers = {};
+    let defaultLayer = null;
 
-    // 2. 加载图层
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
+    // 遍历配置生成 Layer 实例
+    for (const [key, config] of Object.entries(TILE_LAYERS_CONFIG)) {
+        const layer = L.tileLayer(config.url, config.options);
+        layers[config.name] = layer;
+        
+        // 默认使用 OSM
+        if (key === 'osm') defaultLayer = layer;
+    }
+
+    // 1. 初始化地图
+    map = L.map('map', {
+        doubleClickZoom: false,
+        center: [31.88, 118.82], 
+        zoom: 13,
+        zoomControl: false, // 我们先把默认的缩放控件关了，后面可以换位置
+        layers: [defaultLayer]  // 默认显示的图层
+    });
+
+    // 添加图层控制器 
+    // position: 'topleft' | 'topright' | 'bottomleft' | 'bottomright'
+    L.control.layers(layers, null, { 
+        position: 'bottomleft', // 👈 移到左下角，避开头像
+        collapsed: true         // 设为 false 可以让它永远展开(如果你喜欢)
     }).addTo(map);
 
     // ⚡️ 初始化标记图层组，并添加到地图上
