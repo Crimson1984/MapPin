@@ -1,0 +1,387 @@
+/* =========================================
+   1. 全局基础
+   ========================================= */
+body { 
+    margin: 0; 
+    padding: 0; 
+    overflow: hidden; 
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; 
+    background: #f0f0f0;
+}
+
+#map { 
+    width: 100vw; 
+    height: 100vh; 
+    z-index: 1; 
+}
+
+/* 通用隐藏类 */
+.hidden {
+    display: none !important;
+}
+
+/* =========================================
+   2. UI 组件：悬浮卡片 (Floating Card)
+   ========================================= */
+#floating-card {
+    position: absolute;
+    top: 80px;            /* 留出顶部空间 */
+    bottom: 80px;         /* 留出底部空间 */
+    width: 400px;         /* 默认宽度 */
+    max-width: 90vw;      /* 移动端不超过屏幕90% */
+    
+    background: rgba(255, 255, 255, 0.95); /* 高透明度白底 */
+    backdrop-filter: blur(12px);           /* 毛玻璃特效 */
+    -webkit-backdrop-filter: blur(12px);   /* Safari 支持 */
+    
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15); 
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.5); /* 淡淡的边框提升质感 */
+    
+    z-index: 1000;
+    padding: 25px;
+    box-sizing: border-box;
+    
+    /* 动画配置 */
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    opacity: 0;
+    transform: translateY(20px) scale(0.98); /* 稍微缩放一下更有质感 */
+    pointer-events: none;
+    
+    /* 允许卡片内部滚动 */
+    display: flex;
+    flex-direction: column;
+}
+
+/* 卡片内容区域滚动 */
+#card-content {
+    flex: 1;
+    overflow-y: auto;
+    /* 隐藏滚动条但保留功能 */
+    scrollbar-width: thin; 
+}
+
+/* 激活状态 */
+#floating-card.active {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* 左右位置 */
+.card-left { left: 20px; }
+.card-right { right: 20px; }
+
+/* 卡片内部元素 */
+.close-btn {
+    position: absolute; 
+    top: 15px; 
+    right: 15px;
+    background: none; 
+    border: none; 
+    font-size: 24px; 
+    cursor: pointer; 
+    color: #999;
+    z-index: 2;
+    transition: color 0.2s;
+}
+.close-btn:hover { color: #333; }
+
+.meta-info { 
+    color: #888; 
+    font-size: 0.85em; 
+    margin-bottom: 15px; 
+    border-bottom: 1px solid #eee; 
+    padding-bottom: 10px; 
+}
+
+#card-body { 
+    line-height: 1.7; 
+    color: #333; 
+    font-size: 1rem; 
+}
+/* 图片和视频自适应 */
+#card-body img, #card-body video {
+    max-width: 100%;
+    border-radius: 4px;
+    margin: 5px 0;
+}
+
+/* 底部按钮组 (使用 Flexbox 替代 Float) */
+#card-footer {
+    display: flex;
+    justify-content: flex-end; /* 靠右对齐 */
+    gap: 10px; /* 按钮之间的间距 */
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+
+/* 通用按钮样式 */
+#card-footer button {
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+}
+
+/* 具体的按钮颜色 */
+.btn-edit { background: #007bff; color: white; }
+.btn-edit:hover { background: #0056b3; }
+
+.btn-delete { background: #dc3545; color: white; }
+.btn-delete:hover { background: #a71d2a; }
+
+/* =========================================
+   3. 地图标记与弹窗 (Leaflet Popup)
+   ========================================= */
+/* 地图弹窗内的表单 */
+.note-form { 
+    min-width: 240px; 
+}
+.note-form input, 
+.note-form select, 
+.note-form textarea { 
+    width: 100%; 
+    box-sizing: border-box; 
+    margin-bottom: 8px; 
+    padding: 6px; 
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+.note-form textarea {
+    resize: vertical; /* 只允许垂直拉伸 */
+}
+
+/* 标记颜色滤镜 */
+.friend-marker {
+    filter: hue-rotate(260deg) saturate(1.5) brightness(1.1); /* 绿色/青色 */
+}
+.private-marker {
+    filter: hue-rotate(140deg) saturate(2); /* 红色/紫色 */
+}
+
+/* Tooltip 样式 */
+.custom-tooltip {
+    background: rgba(255, 255, 255, 0.95);
+    border: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: sans-serif;
+}
+/* 去掉 Leaflet tooltip 自带的小三角(可选) */
+.leaflet-tooltip-top:before { display: none; }
+
+/* =========================================
+   4. 左上角：搜索与功能区
+   ========================================= */
+#search-container {
+    position: absolute;
+    top: 20px;
+    left: 60px; /* 避开 Leaflet 缩放控件 */
+    z-index: 1000;
+    width: 280px;
+    max-width: 70vw;
+}
+
+#user-search {
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    box-sizing: border-box;
+    font-size: 14px;
+}
+#user-search:focus {
+    outline: 2px solid #007bff;
+}
+
+#search-results {
+    background: white;
+    border-radius: 4px;
+    margin-top: 5px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    max-height: 300px;
+    overflow-y: auto;
+}
+/* 如果内容为空，隐藏 padding/border */
+#search-results:empty {
+    display: none;
+}
+
+.search-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+}
+.search-item:last-child { border-bottom: none; }
+.search-item:hover { background: #f8f9fa; }
+
+/* 正在访问横幅 */
+#visiting-banner {
+    margin-top: 10px;
+    background: #ffc107; /* 醒目的黄色 */
+    color: #333;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+#visiting-banner button {
+    background: white;
+    border: 1px solid #ddd;
+    padding: 2px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-left: 8px;
+}
+
+/* 信箱按钮 */
+#inbox-btn {
+    width: 100%; 
+    padding: 8px; 
+    background: #6c757d; 
+    color: white; 
+    border: none; 
+    border-radius: 4px; 
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    display: flex;
+    justify-content: space-between;
+    transition: background 0.2s;
+}
+#inbox-btn:hover { background: #5a6268; }
+
+#inbox-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background: white;
+    margin-top: 5px;
+    border-radius: 4px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 1001; /* 保证在搜索结果之上 */
+}
+
+/* =========================================
+   5. 右上角：用户资料 (补全)
+   ========================================= */
+#user-profile {
+    /* 定位已在 HTML style 中定义，这里补充细节 */
+    transition: opacity 0.3s;
+}
+#my-avatar {
+    transition: transform 0.2s;
+}
+#my-avatar:hover {
+    transform: scale(1.1);
+}
+
+/* =========================================
+   6. 裁剪模态框 (补全缺失的样式)
+   ========================================= */
+#crop-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85); /* 深色遮罩 */
+    z-index: 9999;
+    
+    /* Flex 居中大法 */
+    display: flex; 
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 裁剪区域容器 */
+.crop-container {
+    background: #333; /* 图片背景深色 */
+    width: 90%;
+    max-width: 500px;
+    height: 400px;
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+    position: relative;
+}
+
+#crop-image {
+    display: block;
+    max-width: 100%;
+}
+
+/* 按钮区域 */
+.crop-buttons {
+    width: 90%;
+    max-width: 500px;
+    background: white;
+    padding: 15px;
+    border-radius: 0 0 8px 8px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    box-sizing: border-box;
+}
+
+.crop-buttons button {
+    padding: 8px 20px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+}
+.crop-buttons button:first-child { background: #f0f0f0; color: #333; } /* 取消 */
+.crop-buttons button:last-child { background: #28a745; color: white; } /* 确定 */
+
+/* =========================================
+   7. 移动端适配
+   ========================================= */
+@media (max-width: 480px) {
+    /* 悬浮窗占满底部 */
+    #floating-card {
+        width: 100%;
+        max-width: 100%;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0;
+        top: auto; /* 取消顶部定位 */
+        height: 60vh; /* 占屏幕高度 60% */
+        border-radius: 12px 12px 0 0;
+        transform: translateY(100%); /* 从底部升起 */
+    }
+    
+    /* 搜索框变窄 */
+    #search-container {
+        left: 10px;
+        width: calc(100% - 70px); /* 留出头像的位置 */
+        top: 10px;
+    }
+    
+    /* 用户头像缩小 */
+    #user-profile {
+        top: 10px;
+        right: 10px;
+    }
+    #my-avatar {
+        width: 40px !important;
+        height: 40px !important;
+    }
+    #my-username {
+        display: none; /* 手机上隐藏名字，省空间 */
+    }
+}
