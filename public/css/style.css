@@ -112,12 +112,39 @@ small { color: var(--text-secondary); font-size: 0.875em; }
 }
 
 /* 图标按钮 (无背景，只有图标) */
-.btn-icon {
+/* .btn-icon {
     padding: 8px;
     background: transparent;
     color: var(--text-secondary);
     border-radius: var(--radius-full);
 }
+.btn-icon:hover {
+    background-color: rgba(0,0,0,0.05);
+    color: var(--primary-color);
+} */
+
+/* 图标按钮 (无背景，只有图标) */
+.btn-icon {
+    /* 1. ⚡️ 核心：使用 Flexbox 强制水平垂直居中 */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    /* 2. 重置默认样式，防止浏览器干扰 */
+    padding: 0;           /* 去掉默认内边距 */
+    width: 32px;          /* 显式定义宽度 */
+    height: 32px;         /* 显式定义高度 (宽高一致才能画圆) */
+    line-height: 1;       /* 消除字体行高导致的偏移 */
+    
+    /* 3. 外观样式 */
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;         /* 确保没有边框占用空间 */
+    border-radius: 50%;   /* 变成正圆 */
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
 .btn-icon:hover {
     background-color: rgba(0,0,0,0.05);
     color: var(--primary-color);
@@ -564,4 +591,239 @@ body {
     #my-username {
         display: none; /* 手机上隐藏名字，省空间 */
     }
+}
+
+
+/* =========================================
+   2. 模态框编辑器 (Modal Editor)
+   ========================================= */
+
+/* 全屏遮罩层 */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6); /* 半透明黑背景 */
+    z-index: 2000; /* 必须高于地图 (Leaflet通常是400-1000) */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none; /* 默认不阻挡点击，显示时改为 auto */
+    transition: opacity var(--transition-normal);
+}
+
+/* 显示状态 (由 JS 切换) */
+.modal-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* 编辑器卡片主体 */
+.modal-card {
+    background: var(--surface-color);
+    width: 800px;
+    max-width: 95%; /* 手机端留点边距 */
+    height: 85vh;   /* 占据屏幕高度的 85% */
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* 防止内容溢出圆角 */
+    transform: translateY(20px);
+    transition: transform var(--transition-normal);
+}
+
+.modal-backdrop.active .modal-card {
+    transform: translateY(0); /* 上浮动画 */
+}
+
+/* --- Header --- */
+.modal-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fcfcfc;
+}
+.modal-header h3 { margin: 0; display: flex; align-items: center; gap: 8px; }
+
+/* --- Meta Info (标题栏) --- */
+.modal-meta {
+    padding: 15px 20px 0;
+    display: flex;
+    gap: 10px;
+}
+
+/* --- Editor Wrapper (核心区) --- */
+.editor-wrapper {
+    flex: 1; /* 撑满剩余空间 */
+    display: flex;
+    flex-direction: column;
+    padding: 15px 20px;
+    overflow: hidden;
+}
+
+.editor-toolbar {
+    display: flex;
+    gap: 10px;
+    padding: 8px;
+    background: #f6f8fa; /* GitHub 风格灰 */
+    border: 1px solid var(--border-color);
+    border-bottom: none;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.btn-toolbar {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+}
+.btn-toolbar:hover { background: rgba(0,0,0,0.05); color: var(--primary-color); }
+
+/* 文本域 */
+.editor-textarea {
+    flex: 1; /* 自动撑满高度 */
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    resize: none; /* 禁止手动拖拽大小，因为它已经自适应了 */
+    font-family: 'Consolas', 'Monaco', monospace; /* 等宽字体写代码更舒服 */
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* 预览区 (默认隐藏) */
+.editor-preview {
+    flex: 1;
+    border: 1px solid var(--border-color);
+    border-top: none;
+    padding: 15px;
+    overflow-y: auto;
+    background: white;
+}
+
+/* --- Footer --- */
+.modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fcfcfc;
+}
+
+.action-buttons { display: flex; gap: 10px; }
+
+/* --- 修复工具栏图标竖排问题 --- */
+.toolbar-group {
+    display: flex;       /* 让内部按钮横向排列 */
+    align-items: center; /* 垂直居中 */
+    gap: 4px;            /* 按钮之间的微小间距 */
+    border-right: 1px solid #e1e4e8; /* (可选) 组与组之间的分隔线 */
+    padding-right: 8px;  /* 分隔线右边的留白 */
+    margin-right: 8px;   /* 组与组之间的外边距 */
+}
+
+/* 最后一组不要分隔线 */
+.toolbar-group:last-child {
+    border-right: none;
+    margin-right: 0;
+}
+
+/* 针对 select 类型的 form-control 进行特殊处理 */
+select.form-control {
+    /* 1. 隐藏浏览器原生的丑陋箭头 */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+
+    /* 2. 定义一个自定义的 SVG 箭头 (灰色小三角) */
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6368' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    
+    /* 3. 设置不重复 */
+    background-repeat: no-repeat;
+
+    /* 4. ⚡️ 关键点：控制箭头位置 */
+    /* right 10px center 意思是：靠右边 10px，垂直居中 */
+    background-position: right 10px center;
+
+    /* 5. 设置箭头大小 */
+    background-size: 16px;
+
+    /* 6. 给文字留出空间，防止文字盖住箭头 */
+    padding-right: 30px;
+}
+
+.spin { animation: spin 1s infinite linear; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+ 
+/* 状态文字的基础样式 */
+.fade-text {
+    font-size: 0.9em;
+    color: #6c757d; /* 灰色 */
+    opacity: 0;     /* 默认隐藏 */
+    transition: opacity 0.5s ease-in-out; /* ⚡️ 0.5秒平滑过渡 */
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* 当加上这个类时，文字显示 */
+.fade-text.show {
+    opacity: 1;
+}
+
+/* 预览区的基础样式 */
+.editor-preview {
+    flex: 1;                 /* 自动撑满剩余垂直空间 */
+    width: 100%;             /* 宽度撑满 */
+    box-sizing: border-box;  /* 关键：让 padding 包含在 width 内 */
+    
+    border: 1px solid #ddd;  /* 边框颜色必须与工具栏一致 */
+    border-top: none;        /* 去掉上边框，实现与工具栏的无缝连接 */
+    border-radius: 0 0 4px 4px; /* 只有下面有圆角 */
+    
+    padding: 15px;           /* 内边距保持一致 */
+    background: #fff;
+    overflow-y: auto;        /* 内容多时出现滚动条 */
+    
+    /* 字体与排版 */
+    font-size: 14px;
+    line-height: 1.6;
+    text-align: left;
+}
+
+/* 预览区里的图片限制 */
+.editor-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 10px 0;
+    display: block; /* 防止图片底部留白 */
+}
+
+/* 引用块样式 */
+.editor-preview blockquote {
+    border-left: 4px solid #ddd;
+    padding-left: 10px;
+    color: #666;
+    margin: 10px 0;
+    background-color: #f9f9f9; /* 加个背景色更好看 */
+    padding: 10px;
+}
+
+/* 代码块样式优化 (可选) */
+.editor-preview pre {
+    background: #f6f8fa;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
 }

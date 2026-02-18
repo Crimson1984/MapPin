@@ -4,11 +4,11 @@ import { initMap,
     getMap, 
     clearMarkers, 
     closeMapPopup,
-    fitToMarkers
+    fitToMarkers,
+    addDraftMarker
 } from './mapManager.js';
 
 import { renderReadMode, 
-    renderEditMode,
     showFloatingCard, 
     hideFloatingCard, 
     renderSearchResults, 
@@ -18,12 +18,17 @@ import { renderReadMode,
     updateUserProfileUI,
     showCropModal,
     hideCropModal,
-    getCroppedCanvas
+    getCroppedCanvas,
+    createQuickPopupContent
 } from './uiManager.js';
 
 import { insertAtCursor, debounce } from './utils.js'; // 引入工具函数
 
 import { API } from './api.js';
+
+import { openEditor, closeEditor } from './editorManager.js';
+
+import { createDraft, loadDraft, getAllNewDrafts } from './draftManager.js';
 
 // --- 全局变量与初始化 ---
 let map = null;
@@ -157,55 +162,62 @@ async function loadNotes(targetUser = null) {
             fitToMarkers();
         }
 
+        // ==========================================
+        // ⚡️ 新增：加载本地草稿 (仅在查看自己时显示)
+        // ==========================================
+        const currentUser = localStorage.getItem('username'); // 假设你存了
+        // 如果 targetUser 为空(看全部) 或者 targetUser 是我自己，才显示草稿
+        if (!targetUser || (currentUser && targetUser === currentUser)) {
+            renderDrafts(); 
+        }
+
     } catch (err) {
         console.error('加载笔记失败:', err);
     }
 }
 
+// ⚡️ 专门负责渲染草稿的辅助函数
+function renderDrafts() {
+    const drafts = getAllNewDrafts();
+    console.log(`加载了 ${drafts.length} 个草稿`);
+
+    drafts.forEach(draft => {
+        addDraftMarker(draft, (clickedDraft) => {
+            // 点击灰色标记 -> 直接打开编辑器
+            console.log("继续编辑草稿:", clickedDraft.title);
+            openEditor({ note: clickedDraft });
+        });
+    });
+}
+
 function onMapDoubleClick(e) {
-
     window.closeCard();
-
     const { lat, lng } = e.latlng;
     
-    // 弹出 Leaflet 原生 Popup (或者你也改成用侧边栏)
-    // 这里演示如何解决 onclick 问题
-    const popupContent = `
-        <div class="note-form" style="min-width: 260px;">
-            <h3 style="margin-top:0; font-size:1.1em; border-bottom:1px solid #eee; padding-bottom:5px;">
-                <span class="material-icons" style="font-size:18px; color:var(--primary-color);">edit_location</span> 新建笔记
-            </h3>
-            
-            <div class="input-group" style="margin-bottom: 2px;">
-                <input id="note-title" class="form-control" placeholder="给笔记起个标题...">
-            </div>
-            
-            <div class="input-group" style="margin-bottom: 3px;">
-                <select id="note-visibility" class="form-control">
-                    <option value="public">🌍 公开</option>
-                    <option value="friends">🤝 仅好友</option>
-                    <option value="private">🔒 仅自己</option>
-                </select>
-            </div>
-
-            <div style="margin-bottom:5px;">
-                <label class="btn btn-secondary" style="width:50%; box-sizing:border-box; justify-content:space-around;">
-                    <span class="material-icons">attach_file</span> 插入附件
-                    <input type="file" onchange="window.handleUpload(this, 'note-content')" hidden>
-                </label>
-            </div>
-
-            <textarea id="note-content" class="form-control" placeholder="写点什么..." rows="3" style="margin-bottom:10px;"></textarea>
-            
-            <button onclick="window.saveNewNote(${lat}, ${lng})" class="btn btn-primary" style="width:100%;">
-                <span class="material-icons">send</span> 发布
-            </button>
-        </div>
-    `;
+    // 📝 查询档案：该位置是否有未完成的草稿？没有则新建。
+    // draftManager.loadDraft 会根据坐标生成 key 查找 localStorage
+    let currentDraft = loadDraft({ lat, lng });
     
+    if (!currentDraft) {
+        currentDraft = createDraft({ lat, lng });
+    }
+
+    // 🎨 构建 UI：传入草稿对象
+    // createQuickPopupContent 返回的是真实的 DOM 节点
+    const popupDOM = createQuickPopupContent(currentDraft, (updatedDraft) => {
+        // --- 回调函数：当用户点击“详细编辑”时触发 ---
+        
+        // A. 关闭小弹窗
+        map.closePopup();
+
+        // B. 打开大编辑器，把更新后的草稿传过去
+        openEditor({ note: updatedDraft });
+    });
+
+    // 4. 显示 Leaflet 弹窗
     L.popup()
         .setLatLng(e.latlng)
-        .setContent(popupContent)
+        .setContent(popupDOM) // Leaflet 支持直接传 DOM
         .openOn(map);
 }
 
@@ -231,67 +243,12 @@ async function loadInboxData() {
 
 // --- 3. 挂载到 Window 的全局函数 (供 HTML onclick 调用) ---
 
-// 保存新笔记
-window.saveNewNote = async function(lat, lng) {
-    // 1. 获取 DOM 元素值
-    const titleInput = document.getElementById('note-title');
-    const contentInput = document.getElementById('note-content');
-    const visibilityInput = document.getElementById('note-visibility');
-
-    if (!titleInput || !contentInput) return; // 防御性编程
-
-    const title = titleInput.value;
-    const content = contentInput.value;
-    const visibility = visibilityInput ? visibilityInput.value : 'public';
-
-    // 2. 校验
-    if (!title) return alert("标题不能为空");
-
-    try {
-        // 3. 调用 API
-        const res = await API.createNote({ 
-            title, 
-            content, 
-            lat, 
-            lng, 
-            visibility 
-        });
-
-        if (res.success) {
-
-            if (map) {
-                map.closePopup(); 
-            }
-
-            loadNotes(); 
-            
-            setTimeout(() => {
-                alert("发布成功！"); // 如果觉得烦，可以注释掉这一行
-                console.log("笔记发布成功");
-            }, 100);
-
-        } else {
-            alert("发布失败: " + (res.message || '未知错误'));
-        }
-    } catch (err) {
-        console.error(err);
-        alert("发布出错: " + err.message);
-    }
-};
-
 
 // 挂载关闭函数
 window.closeCard = function() {
     hideFloatingCard();
     // 也可以顺便清除当前选中的笔记状态
     window.currentNote = null;
-};
-
-// 挂载编辑功能
-window.enableEditMode = function(noteId) {
-    console.log('准备编辑笔记:', noteId);
-    // 这里暂时先打个 log，后面我们再写 renderEditMode
-    alert('编辑功能开发中... ID: ' + noteId);
 };
 
 // 挂载删除功能
@@ -329,71 +286,12 @@ window.enableEditMode = function() {
 
     console.log("进入编辑模式:", note.title);
 
-    // 1. 生成编辑表单 HTML
-    const html = renderEditMode(note);
+    openEditor({ note: note });
 
-    // 2. 替换悬浮窗内容
-    const contentDiv = document.getElementById('card-content');
-    if (contentDiv) {
-        contentDiv.innerHTML = html;
-    }
-};
-
-// --- 取消编辑 ---
-window.cancelEdit = function() {
-    const note = window.currentNote;
-    if (!note) return;
-
-    // 1. 重新生成只读 HTML (回退)
-    const html = renderReadMode(note);
-
-    // 2. 替换回去
-    const contentDiv = document.getElementById('card-content');
-    if (contentDiv) {
-        contentDiv.innerHTML = html;
-    }
-};
-
-// --- 保存编辑 ---
-window.saveEdit = async function() {
-    const note = window.currentNote;
-    if (!note) return;
-
-    // 1. 获取输入框的值
-    const newTitle = document.getElementById('edit-title').value;
-    const newContent = document.getElementById('edit-content').value;
-    const newVisibility = document.getElementById('edit-visibility').value;
-
-    if (!newTitle || !newContent) return alert("标题和内容不能为空");
-
-    try {
-        // 2. 调用 API 更新
-        // 假设 api.js 里有 updateNote 方法: (id, data) => request(...)
-        const res = await API.updateNote(note.id, {
-            title: newTitle,
-            content: newContent,
-            visibility: newVisibility
-        });
-
-        if (res.success) {
-            alert("保存成功！");
-            
-            // 3. 更新本地缓存的 note 数据，防止 UI 闪烁旧数据
-            window.currentNote.title = newTitle;
-            window.currentNote.content = newContent;
-            window.currentNote.visibility = newVisibility;
-
-            // 4. 退出编辑模式 (渲染回只读)
-            window.cancelEdit(); 
-            
-            // 5. 刷新地图上的标记 (比如颜色可能变了，或者只是为了保险)
-            loadNotes(); 
-        } else {
-            alert("保存失败: " + res.message);
-        }
-    } catch (err) {
-        console.error(err);
-        alert("保存出错");
+    // 隐藏悬浮卡片
+    const floatingCard = document.getElementById('floating-card');
+    if (floatingCard) {
+        floatingCard.classList.add('hidden');
     }
 };
 
@@ -475,13 +373,6 @@ window.saveAvatar = async function() {
             // 假设你在 API.js 里加了 uploadAvatar
             const res = await API.uploadAvatar(formData); 
             
-            // // 如果还没加 API，暂时直接 fetch
-            // const token = localStorage.getItem('userToken');
-            // const res = await fetch('http://localhost:3000/users/avatar', {
-            //     method: 'POST',
-            //     headers: { 'Authorization': 'Bearer ' + token },
-            //     body: formData
-            // });
             const data = await res.json();
 
             if (data.success) {
@@ -634,3 +525,4 @@ window.handleFileUpload = async function(inputElement, textAreaId) {
 
 // 页面加载完成
 console.log('App 初始化完成');
+window.loadNotes = loadNotes;

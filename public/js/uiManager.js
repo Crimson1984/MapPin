@@ -1,3 +1,8 @@
+import { API } from './api.js';
+import { removeDraft } from './draftManager.js';
+import { closeMapPopup } from './mapManager.js';
+
+
 // 定义模块私有变量 (替代原来的全局变量)
 let cropperInstance = null;
 
@@ -23,6 +28,208 @@ function getFooterButtons(note) {
     
     // 如果是好友且有权限，可能显示其他按钮...
     return '';
+}
+
+/**
+ * ⚡️ 创建快速记录弹窗 DOM
+ * @param {Object} draft - 当前草稿对象 (可能包含 title, content)
+ * @param {Function} onOpenFullEditor - 回调函数 (draft) => void
+ */
+// export function createQuickPopupContent(draft, onOpenFullEditor) {
+//     const container = document.createElement('div');
+//     container.className = 'quick-popup-container';
+//     container.style.padding = '10px';
+//     container.style.minWidth = '240px';
+//     container.style.textAlign = 'center';
+
+//     // 标题
+//     const header = document.createElement('h3');
+//     header.style.margin = '0 0 10px 0';
+//     header.style.fontSize = '16px';
+//     header.innerHTML = '<span class="material-icons" style="font-size:18px; vertical-align:text-bottom; color:var(--primary-color);">edit_location</span> 新建笔记';
+//     container.appendChild(header);
+
+//     // 标题输入
+//     const titleInput = document.createElement('input');
+//     titleInput.className = 'form-control';
+//     titleInput.placeholder = '标题...';
+//     titleInput.style.marginBottom = '8px';
+//     titleInput.value = draft.title || ''; // 回填草稿数据
+//     container.appendChild(titleInput);
+
+//     // 内容输入
+//     const contentInput = document.createElement('textarea');
+//     contentInput.className = 'form-control';
+//     contentInput.placeholder = '写点什么...';
+//     contentInput.style.height = '60px';
+//     contentInput.style.resize = 'none';
+//     contentInput.style.marginBottom = '10px';
+//     contentInput.value = draft.content || ''; // 回填草稿数据
+//     container.appendChild(contentInput);
+
+//     // 按钮容器
+//     const btnContainer = document.createElement('div');
+//     btnContainer.style.display = 'flex';
+//     btnContainer.style.gap = '10px';
+
+//     // "详细编辑" 按钮
+//     const fullEditorBtn = document.createElement('button');
+//     fullEditorBtn.className = 'btn btn-primary';
+//     fullEditorBtn.style.flex = '1';
+//     fullEditorBtn.innerHTML = '<span class="material-icons">edit_note</span> 详细编辑';
+    
+//     // ⚡️ 绑定点击事件：收集数据并通过回调传出去
+//     fullEditorBtn.addEventListener('click', () => {
+//         // 更新草稿数据
+//         draft.title = titleInput.value;
+//         draft.content = contentInput.value;
+        
+//         // 触发回调
+//         if (typeof onOpenFullEditor === 'function') {
+//             onOpenFullEditor(draft);
+//         }
+//     });
+
+//     btnContainer.appendChild(fullEditorBtn);
+//     container.appendChild(btnContainer);
+
+//     return container;
+// }
+
+export function createQuickPopupContent(draft, onOpenFullEditor) {
+    const container = document.createElement('div');
+    container.className = 'quick-popup-container';
+    container.style.padding = '10px';
+    container.style.minWidth = '260px'; // 稍微宽一点以容纳两个按钮
+    container.style.textAlign = 'center';
+
+    // 1. 标题头
+    const header = document.createElement('h3');
+    header.style.margin = '0 0 10px 0';
+    header.style.fontSize = '16px';
+    header.innerHTML = '<span class="material-icons" style="font-size:18px; vertical-align:text-bottom; color:var(--primary-color);">edit_location</span> 新建笔记';
+    container.appendChild(header);
+
+    // 2. 标题输入
+    const titleInput = document.createElement('input');
+    titleInput.className = 'form-control';
+    titleInput.placeholder = '标题...';
+    titleInput.style.marginBottom = '8px';
+    titleInput.value = draft.title || ''; 
+    container.appendChild(titleInput);
+
+    // 3. 内容输入
+    const contentInput = document.createElement('textarea');
+    contentInput.className = 'form-control';
+    contentInput.placeholder = '写点什么...';
+    contentInput.style.height = '60px';
+    contentInput.style.resize = 'none';
+    contentInput.style.marginBottom = '8px';
+    contentInput.value = draft.content || ''; 
+    container.appendChild(contentInput);
+
+    // 4. ⚡️ 新增：可见性选择
+    const visibilitySelect = document.createElement('select');
+    visibilitySelect.className = 'form-control';
+    visibilitySelect.style.marginBottom = '12px';
+    visibilitySelect.style.fontSize = '13px'; //稍微小一点
+    visibilitySelect.innerHTML = `
+        <option value="public">🌍 公开笔记</option>
+        <option value="friends">👥 仅好友可见</option>
+        <option value="private">🔒 仅自己可见</option>
+    `;
+    // 如果草稿里有存过可见性，就回显，否则默认 public
+    visibilitySelect.value = draft.visibility || 'public';
+    container.appendChild(visibilitySelect);
+
+    // 5. 按钮容器
+    const btnContainer = document.createElement('div');
+    btnContainer.style.display = 'flex';
+    btnContainer.style.gap = '8px';
+
+    // --- 按钮 A: 详细编辑 (灰色/次要) ---
+    const fullEditorBtn = document.createElement('button');
+    fullEditorBtn.className = 'btn btn-secondary'; // 改为次要样式
+    fullEditorBtn.style.flex = '1';
+    fullEditorBtn.style.padding = '6px 10px';
+    fullEditorBtn.innerHTML = '<span class="material-icons" style="font-size:16px">open_in_full</span> 详细';
+    
+    fullEditorBtn.addEventListener('click', () => {
+        // 同步当前输入的数据到 draft 对象
+        draft.title = titleInput.value;
+        draft.content = contentInput.value;
+        draft.visibility = visibilitySelect.value; // ⚡️ 把可见性也传过去
+        
+        if (typeof onOpenFullEditor === 'function') {
+            onOpenFullEditor(draft);
+        }
+        // 关闭当前弹窗 (依赖全局 map 对象，或者你可以传进来)
+        closeMapPopup();
+    });
+
+    // --- 按钮 B: 直接发布 (绿色/主要) ---
+    const publishBtn = document.createElement('button');
+    publishBtn.className = 'btn btn-primary'; // 主要样式
+    publishBtn.style.flex = '1.5'; // 让发布按钮稍微宽一点
+    publishBtn.style.padding = '6px 10px';
+    publishBtn.innerHTML = '<span class="material-icons" style="font-size:16px">send</span> 发布';
+
+    // ⚡️ 绑定直接发布逻辑
+    publishBtn.addEventListener('click', async () => {
+        const title = titleInput.value.trim();
+        const content = contentInput.value.trim();
+        const visibility = visibilitySelect.value;
+
+        if (!title || !content) {
+            alert('标题和内容不能为空');
+            return;
+        }
+
+        // UI 反馈：禁用按钮防止重复点击
+        const originalText = publishBtn.innerHTML;
+        publishBtn.disabled = true;
+        publishBtn.innerHTML = '⏳...';
+
+        try {
+            // 调用 API 创建笔记
+            const res = await API.createNote({
+                title,
+                content,
+                visibility,
+                lat: draft.lat,
+                lng: draft.lng
+            });
+
+            if (res.success) {
+                // 1. 删除本地草稿
+                removeDraft(draft);
+                
+                // 2. 关闭弹窗
+                closeMapPopup();
+
+                // 3. 刷新地图上的点
+                if (window.loadNotes) window.loadNotes();
+
+                // (可选) 显示个全局提示
+                // alert('发布成功'); 
+            } else {
+                alert('发布失败: ' + res.message);
+                publishBtn.disabled = false;
+                publishBtn.innerHTML = originalText;
+            }
+        } catch (err) {
+            console.error(err);
+            alert('网络错误，请稍后重试');
+            publishBtn.disabled = false;
+            publishBtn.innerHTML = originalText;
+        }
+    });
+
+    btnContainer.appendChild(fullEditorBtn);
+    btnContainer.appendChild(publishBtn);
+    container.appendChild(btnContainer);
+
+    return container;
 }
 
 // 渲染“只读模式”的卡片 HTML
@@ -115,48 +322,7 @@ export function hideFloatingCard() {
 }
 
 // ⚡️ 新增：生成“编辑模式”的 HTML
-export function renderEditMode(note) {
-    // 1. 判断可见性选中状态
-    const isPublic = (note.visibility === 'public') ? 'selected' : '';
-    const isFriends = (note.visibility === 'friends') ? 'selected' : '';
-    const isPrivate = (note.visibility === 'private') ? 'selected' : '';
 
-    // 2. 返回 HTML 字符串
-    return `
-        <div class="edit-mode-container">
-            <div class="input-group">
-                <input type="text" id="edit-title" value="${note.title}" class="form-control" style="font-weight:bold; font-size: 1.1em;" placeholder="笔记标题">
-            </div>
-            
-            <div class="input-group">
-                <select id="edit-visibility" class="form-control">
-                    <option value="public" ${isPublic}>🌍 公开 (所有人可见)</option>
-                    <option value="friends" ${isFriends}>🤝 仅好友可见</option>
-                    <option value="private" ${isPrivate}>🔒 私密 (仅自己可见)</option>
-                </select>
-            </div>
-
-            <div style="margin-bottom: 8px; display:flex; gap: 5px;">
-                <button onclick="document.getElementById('edit-file-input').click()" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;">
-                    <span class="material-icons" style="font-size:16px;">image</span> 插入附件
-                </button>
-                <input type="file" id="edit-file-input" hidden onchange="window.handleFileUpload(this, 'edit-content')">
-                <span style="font-size: 12px; color: #666; display:flex; align-items:center; margin-left:auto;">
-                    <span class="material-icons" style="font-size:14px; color:#f9ab00; margin-right:2px;">edit</span> 编辑中
-                </span>
-            </div>
-            
-            <textarea id="edit-content" class="form-control" rows="8" placeholder="支持 Markdown 语法...">${note.content}</textarea>
-            
-            <div style="text-align: right; display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px;">
-                <button onclick="window.cancelEdit()" class="btn btn-secondary">取消</button>
-                <button onclick="window.saveEdit()" class="btn btn-primary">
-                    <span class="material-icons">save</span> 保存
-                </button>
-            </div>
-        </div>
-    `;
-}
 
 // 生成用户搜索结果列表 HTML
 export function renderSearchResults(users, currentUsername) {

@@ -10,7 +10,6 @@
     <link rel="stylesheet" href="./lib/leaflet/leaflet.css" />
     <link rel="stylesheet" href="./lib/marked/github-markdown-light.min.css">
     <link rel="stylesheet" href="./lib/cropper/cropper.min.css">
-    <!-- //<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"> -->
     <link rel="stylesheet" href="./lib/material-icons/material-icons.css">
     <link rel="stylesheet" href="./css/style.css">
 
@@ -85,7 +84,85 @@
         </div>
     </div>
 
+    <div id="editor-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            
+            <div class="modal-header">
+                <h3>
+                    <span class="material-icons">edit_note</span> 
+                    <span id="modal-title-text">编辑笔记</span>
+                </h3>
+                <button class="btn-icon">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+
+            <div class="modal-meta">
+                <input type="text" id="editor-title" class="form-control" placeholder="给你的笔记起个标题..." style="font-weight:bold; font-size:16px;">
+                
+                <select id="editor-visibility" class="form-control" style="width: auto; min-width: 120px;">
+                    <option value="public">🌍 公开</option>
+                    <option value="friends">🤝 仅好友</option>
+                    <option value="private">🔒 仅自己</option>
+                </select>
+            </div>
+
+            <div class="editor-wrapper">
+                <div class="editor-toolbar">
+                    <div class="toolbar-group">
+                        <button class="btn-toolbar" title="加粗" onclick="insertMarkdown('**', '**')"><span class="material-icons">format_bold</span></button>
+                        <button class="btn-toolbar" title="斜体" onclick="insertMarkdown('*', '*')"><span class="material-icons">format_italic</span></button>
+                        <button class="btn-toolbar" title="引用" onclick="insertMarkdown('> ', '')"><span class="material-icons">format_quote</span></button>
+                        <button class="btn-toolbar" title="代码块" onclick="insertMarkdown('```\n', '\n```')"><span class="material-icons">code</span></button>
+                    </div>
+                    
+                    <div class="toolbar-group">
+                        <button class="btn-toolbar" title="插入图片" onclick="document.getElementById('editor-file').click()">
+                            <span class="material-icons">image</span>
+                        </button>
+                        <input type="file" id="editor-file" hidden>
+                    </div>
+
+                    <div class="toolbar-group" style="margin-left: auto;">
+                        <button class="btn-toolbar" id="btn-preview-toggle">
+                            <span class="material-icons">visibility</span> 预览
+                        </button>
+                    </div>
+                </div>
+
+                <textarea id="editor-content" class="form-control editor-textarea" placeholder="在此处输入内容，支持 Markdown 语法..."></textarea>
+                
+                <div id="editor-preview" class="editor-preview markdown-body hidden"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button id="btn-editor-delete" class="btn btn-danger" style="margin-right: auto;">
+                    <span class="material-icons">delete</span> 删除
+                </button>
+
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div class="status-text">
+                        <span id="draft-status" class="fade-text"></span>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary">取消</button>
+
+                        <button id="btn-save-draft" class="btn btn-secondary">
+                            <span class="material-icons">save</span> 保存草稿
+                        </button>
+
+                        <button class="btn btn-primary" >
+                            <span class="material-icons">upload</span> 发布笔记
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
     <script type="module" src="./js/app.js"></script>
+    <script type="module" src="./js/editorManager.js"></script>
 
 </body>
 </html>

@@ -1,6 +1,3 @@
-// public/js/mapManager.js
-import { Icons } from './utils.js';
-
 const TILE_LAYERS_CONFIG = {
     osm: {
         name: "🗺️ 标准地图 (OSM)",
@@ -53,6 +50,41 @@ const TILE_LAYERS_CONFIG = {
     }
 
 };
+
+
+// --- 🎨 图标资源配置 ---
+const IconConfig = {
+    shadowUrl: '/lib/leaflet/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+};
+
+// 辅助函数：快速生成不同颜色的图标
+function createColorIcon(color) {
+    return new L.Icon({
+        ...IconConfig,
+        iconUrl: `/lib/leaflet/images/marker-icon-${color}.png`
+    });
+}
+
+// 预定义图标实例 (单例模式，避免重复 new)
+const ICONS = {
+    public:  createColorIcon('blue'),   // 🔵 公开笔记
+    friends: createColorIcon('green'),  // 🟢 好友可见
+    private: createColorIcon('red'),    // 🔴 仅自己可见
+    draft:   createColorIcon('grey'),   // ⚪️ 草稿 (新增)
+    default: createColorIcon('blue')
+};
+
+// 辅助函数：根据笔记对象获取对应图标
+function getIconForNote(note, isDraft = false) {
+    if (isDraft) return ICONS.draft;
+    
+    // 根据可见性返回图标，如果没有匹配则返回默认
+    return ICONS[note.visibility] || ICONS.default;
+}
 
 
 let map = null; // 模块内部私有变量
@@ -109,25 +141,12 @@ export function clearMarkers() {
 export function addMarker(note, onClickCallback) {
     if (!markersLayer) return; //以此确保容器存在
 
-    // 根据可见性决定样式类名
-    let customClassName = '';
-    if (note.visibility === 'private') customClassName = 'private-marker';
-    else if (note.visibility === 'friends') customClassName = 'friend-marker';
-
-    // 创建自定义 Icon (整合了你原来的逻辑)
-    const myIcon = L.icon({
-        iconUrl: '/lib/leaflet/images/marker-icon.png',
-        shadowUrl: '/lib/leaflet/images/marker-shadow.png',
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        tooltipAnchor: [16, -28],
-        className: customClassName // 注入 CSS 类 (红/绿)
-    });
+    // 获取统一图标
+    const icon = getIconForNote(note, false);
 
 
     // 创建标记
-    const marker = L.marker([note.lat, note.lng], { icon: myIcon }).addTo(markersLayer);
+    const marker = L.marker([note.lat, note.lng], { icon: icon }).addTo(markersLayer);
     
     // 绑定点击事件
     if (onClickCallback) {
@@ -151,6 +170,43 @@ export function addMarker(note, onClickCallback) {
         offset: [0, -30],
         className: 'custom-tooltip'
     });
+
+    return marker;
+}
+
+
+/**
+ * ⚡️ 添加草稿标记
+ * @param {Object} draft - 草稿对象
+ * @param {Function} onClick - 点击时的回调 (打开编辑器)
+ */
+export function addDraftMarker(draft, onClick) {
+    if (!markersLayer) return; //以此确保容器存在
+
+    const icon = getIconForNote(draft, true);
+
+    const marker = L.marker([draft.lat, draft.lng], {
+        icon: icon,
+        opacity: 0.7, // ⚡️ 草稿稍微透明一点，以示区别
+        zIndexOffset: 500 // ⚡️ 让草稿浮在普通标记上面 (可选)
+    });
+
+    // 绑定点击事件
+    marker.on('click', () => {
+        if (typeof onClick === 'function') {
+            onClick(draft);
+        }
+    });
+
+    marker.addTo(markersLayer)
+    
+    // 可选：给草稿加个 Tooltip
+    marker.bindTooltip("📝 草稿: " + (draft.title || "点击继续编辑"), {
+        direction: 'top',
+        offset: [0, -35]
+    });
+
+    
 
     return marker;
 }
