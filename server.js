@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const app = express();
+require('dotenv').config();
 
 // --- 0. 基础中间件 (最先执行) ---
 app.use(cors());
@@ -68,7 +69,8 @@ app.use((err, req, res, next) => {
 
 
 // --- 5. 启动服务器 ---
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 服务器正在运行: http://localhost:${PORT}/map.html`);
+const PORT = process.env.PORT;
+
+app.listen(PORT, '0.0.0.0' ,() => {
+    console.log(`🚀 服务器正在运行: 端口 ${PORT}`);
 });

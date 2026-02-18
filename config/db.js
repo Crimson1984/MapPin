@@ -1,11 +1,12 @@
 const mysql = require('mysql2');
+require('dotenv').config();
 
 //--- 配置数据库连接 ---
 const db = mysql.createConnection({   //放入db.js
-    host:'localhost',
-    user:'root',
-    password:'485623',
-    database:'map_app'
+    host:process.env.DB_HOST,
+    user:process.env.DB_USER,
+    password:process.env.DB_PASS,
+    database:process.env.DB_NAME
 });
 
 //--- 测试链接 ---

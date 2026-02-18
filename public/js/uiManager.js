@@ -414,7 +414,7 @@ export function toggleInboxDisplay() {
 export function updateUserProfileUI(user) {
     const nameEl = document.getElementById('my-username');
     const avatarEl = document.getElementById('my-avatar');
-    const SERVER_URL = 'http://localhost:3000'; // 或者从配置里读
+    const SERVER_URL = ''; // 或者从配置里读
 
     // 更新名字
     if (nameEl) nameEl.innerText = user.username;

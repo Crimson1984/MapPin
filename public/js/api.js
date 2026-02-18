@@ -1,5 +1,5 @@
 // 基础配置
-const API_BASE_URL = 'http://localhost:3000';
+const API_BASE_URL = '';
 
 // 获取 Token
 function getToken() {

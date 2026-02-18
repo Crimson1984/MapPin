@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 module.exports = {
-    SECRET_KEY: 'my_super_secret_key_123' // 你的密钥
+    SECRET_KEY: process.env.JWT_SECRET
 };
