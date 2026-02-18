@@ -372,8 +372,7 @@ window.saveAvatar = async function() {
         try {
             // 假设你在 API.js 里加了 uploadAvatar
             const res = await API.uploadAvatar(formData); 
-            
-            const data = await res.json();
+            const data = res;
 
             if (data.success) {
                 alert('头像上传成功');
