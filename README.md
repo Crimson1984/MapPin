@@ -1,3 +1,5 @@
+[🇺🇸 English](README.md) | [🇨🇳 简体中文](README_CN.md) 
+
 # 🗺️ MapPin - Full-Stack Geospatial Note-Taking Application
 
 MapPin is a location-based note-taking application that combines interactive map navigation with rich text editing. It allows users to "pin" locations anywhere on the map and leave exclusive notes featuring images, videos, and Markdown formatting. It also provides a comprehensive multi-user authentication and privacy control system.

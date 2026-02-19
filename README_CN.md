@@ -1,3 +1,5 @@
+[🇺🇸 English](README.md) | [🇨🇳 简体中文](README_CN.md) 
+
 # 🗺️ MapPin - 地理笔记
 
 MapPin 是一个结合了地图交互与富文本记录的地理位置笔记应用。它允许用户在地图上的任意位置留下带有图片、视频、Markdown 排版的笔记。
