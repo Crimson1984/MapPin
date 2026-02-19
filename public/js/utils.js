@@ -1,6 +1,3 @@
-// public/js/utils.js
-
-
 // 简单的防抖函数 (可选，用于优化搜索)
 export function debounce(func, wait) {
     let timeout;
