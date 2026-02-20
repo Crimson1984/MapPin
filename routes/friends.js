@@ -4,77 +4,81 @@ const db = require('../config/db');
 const authenticateToken = require('../middleware/auth');
 
 // --- 1. 发送好友请求 ---
-router.post('/request', authenticateToken, (req, res) => {
+router.post('/request', authenticateToken, async (req, res) => {
     const requester = req.user.username; 
     const { receiver } = req.body;
 
-    // 自己不能加自己
     if (requester === receiver) {
-        return res.status(400).json({ success: false, message: '不能添加加自己为好友' });
+        return res.status(400).json({ success: false, message: '不能添加自己为好友' });
     }
 
-    // 1. 检查是否已经存在记录 (无论 pending, accepted, 还是 rejected)
-    const sqlCheck = 'SELECT * FROM friendships WHERE (requester = ? AND receiver = ?) OR (requester = ? AND receiver = ?)';
-    
-    db.query(sqlCheck, [requester, receiver, receiver, requester], (err, results) => {
-        if (err) return res.status(500).json({ success: false, message: '服务器错误' });
+    // ⚡️ 修改点 2: 用 try...catch 包裹所有数据库操作
+    try {
+        const sqlCheck = 'SELECT * FROM friendships WHERE (requester = ? AND receiver = ?) OR (requester = ? AND receiver = ?)';
+        
+        // ⚡️ 修改点 3: 第一次查询 (用 await 等待，解构出 results)
+        const [results] = await db.query(sqlCheck, [requester, receiver, receiver, requester]);
 
         if (results.length > 0) {
             const rel = results[0];
 
-            // Case 1: 已经是好友
+            console.log(`[好友申请] ${requester} 向 ${receiver}`);
+
             if (rel.status === 'accepted') {
                 return res.json({ success: false, message: '你们已经是好友了' });
             }
-
-            // Case 2: 申请中
             if (rel.status === 'pending') {
                 return res.json({ success: false, message: '申请已发送，请等待对方处理' });
             }
 
-            // Case 3: 之前被拒绝过 (核心修复点!)
-            // 逻辑: 找到那条死掉的记录，把它的状态改回 'pending'，并更新发起人和接收人
-            // (为什么要更新发起人? 因为可能是 B 拒绝了 A，现在 A 又想加 B，或者 B 后悔了想反向加 A)
+            // Case 3: 之前被拒绝过 -> 执行 UPDATE
             if (rel.status === 'rejected') {
                 const sqlUpdate = 'UPDATE friendships SET status = "pending", requester = ?, receiver = ? WHERE id = ?';
-                db.query(sqlUpdate, [requester, receiver, rel.id], (err, updateResult) => {
-                    if (err) return res.status(500).json({ success: false, message: '重试失败' });
-                    return res.json({ success: true, message: '已重新发送好友申请!' });
-                });
-                return; // 结束函数，不再执行下面的 INSERT
+                // ⚡️ 修改点 4: 消灭嵌套回调，直接 await 即可
+                await db.query(sqlUpdate, [requester, receiver, rel.id]);
+                return res.json({ success: true, message: '已重新发送好友申请!' });
             }
+        } else {
+            // Case 4: 这是一个全新的申请 -> 执行 INSERT
+            const sqlInsert = 'INSERT INTO friendships (requester, receiver, status) VALUES (?, ?, "pending")';
+            // ⚡️ 修改点 5: 同样消灭回调，直接 await
+            await db.query(sqlInsert, [requester, receiver]);
+            return res.json({ success: true, message: '好友申请已发送!' });
         }
-
-        // Case 4: 这是一个全新的申请 (数据库里没记录) -> 执行插入
-        const sqlInsert = 'INSERT INTO friendships (requester, receiver, status) VALUES (?, ?, "pending")';
-        db.query(sqlInsert, [requester, receiver], (err, result) => {
-            if (err) return res.status(500).json({ success: false, message: '申请失败' });
-            res.json({ success: true, message: '好友申请已发送!' });
-        });
-    });
+    } catch (err) {
+        // 集中捕获 SELECT, UPDATE, INSERT 任何一步可能发生的错误
+        console.error('好友请求处理错误:', err);
+        res.status(500).json({ success: false, message: '服务器错误' });
+    }
 });
 
-// --- 2. 获取“待处理”的好友请求 (别人发给我的) ---
-router.get('/pending', authenticateToken, (req, res) => {
+// --- 2. 获取“待处理”的好友请求 ---
+router.get('/pending', authenticateToken, async (req, res) => {
     const myName = req.user.username;
-    // 查 requester 是别人，receiver 是我，且状态是 pending 的记录
-    const sql = 'SELECT * FROM friendships WHERE receiver = ? AND status = "pending"';
     
-    db.query(sql, [myName], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+    try {
+        const sql = 'SELECT * FROM friendships WHERE receiver = ? AND status = "pending"';
+        const [results] = await db.query(sql, [myName]);
         res.json(results);
-    });
+    } catch (err) {
+        console.error('获取待处理请求失败:', err);
+        res.status(500).json({ error: '服务器内部错误' });
+    }
 });
 
 // --- 3. 同意/拒绝好友请求 ---
-router.put('/response', authenticateToken, (req, res) => {
-    const { id, action } = req.body; // id 是 friendship 表的主键, action 是 'accepted' 或 'rejected'
+router.put('/response', authenticateToken, async (req, res) => {
+    const { id, action } = req.body; 
     
-    const sql = 'UPDATE friendships SET status = ? WHERE id = ?';
-    db.query(sql, [action, id], (err, result) => {
-        if (err) return res.status(500).json({ success: false, message: '操作失败' });
+    try {
+        const sql = 'UPDATE friendships SET status = ? WHERE id = ?';
+        await db.query(sql, [action, id]);
+        console.log(`[申请已处理] ID:${id} Action:${action}`);
         res.json({ success: true, message: '操作成功' });
-    });
+    } catch (err) {
+        console.error('处理好友请求失败:', err);
+        res.status(500).json({ success: false, message: '操作失败' });
+    }
 });
 
 module.exports = router;

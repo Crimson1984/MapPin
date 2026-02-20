@@ -40,29 +40,24 @@ router.post('/api/upload', authenticateToken, upload.single('file'), (req, res) 
     });
 });
 
-// --- 🔐 安全资源访问接口 (最终修复版) ---
-router.get('/uploads/resources/*filepath', (req, res) => {
-    
-    // ⚡️ 修复核心: 处理数组类型的路径参数
+// --- 安全资源访问接口 ---
+router.get('/uploads/resources/*filepath', authenticateToken ,(req, res) => {
     let relativePath = req.params.filepath;
     if (Array.isArray(relativePath)) {
-        relativePath = relativePath.join('/'); // 把 ['2026', '02', 'x.png'] 变成 "2026/02/x.png"
+        relativePath = relativePath.join('/');
     }
 
-    // 构造数据库查询路径
     const dbStoredPath = `/uploads/resources/${relativePath}`;
-
-    // 获取 Token
     const token = req.query.token || (req.headers['authorization'] && req.headers['authorization'].split(' ')[1]);
 
     if (!token) return res.status(401).send('无权访问: 请登录');
 
-    jwt.verify(token, SECRET_KEY, (err, user) => {
+    // ⚡️ 修改点 1: 在 jwt.verify 的回调函数前面加上 async
+    jwt.verify(token, SECRET_KEY, async (err, user) => {
         if (err) return res.status(403).send('无权访问: Token 无效');
         
         const currentUsername = user.username;
 
-        // SQL 查询
         const sql = `
             SELECT n.*, f.status as friend_status
             FROM notes n
@@ -73,8 +68,12 @@ router.get('/uploads/resources/*filepath', (req, res) => {
             LIMIT 1
         `;
         
-        db.query(sql, [currentUsername, currentUsername, `%${dbStoredPath}%`], (dbErr, results) => {
-            if (dbErr || results.length === 0) {
+        // ⚡️ 修改点 2: 增加 try...catch 包裹数据库操作
+        try {
+            // ⚡️ 修改点 3: 移除嵌套回调，使用 await 和解构提取结果
+            const [results] = await db.query(sql, [currentUsername, currentUsername, `%${dbStoredPath}%`]);
+
+            if (results.length === 0) {
                 return res.status(404).send('资源未找到或无权访问'); 
             }
 
@@ -86,7 +85,6 @@ router.get('/uploads/resources/*filepath', (req, res) => {
             else if (note.visibility === 'friends' && note.friend_status === 'accepted') isAllowed = true;
 
             if (isAllowed) {
-                // 发送文件
                 const absolutePath = path.join(__dirname, '../uploads', 'resources', relativePath);
                 if (fs.existsSync(absolutePath)) {
                     res.sendFile(absolutePath);
@@ -96,7 +94,12 @@ router.get('/uploads/resources/*filepath', (req, res) => {
             } else {
                 res.status(403).send('无权访问此资源');
             }
-        });
+
+        } catch (dbErr) {
+            // ⚡️ 修改点 4: 集中处理数据库查询报错
+            console.error('资源权限验证查询失败:', dbErr);
+            res.status(500).send('服务器内部错误');
+        }
     });
 });
 

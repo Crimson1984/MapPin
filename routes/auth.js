@@ -9,75 +9,68 @@ const { SECRET_KEY } = require('../config/config');
 // ⚡️ 注意: 函数前面加了 async，因为加密需要时间
 router.post('/register', async (req, res) => {
     const { username, password } = req.body;
-    console.log('收到注册请求:', username); // 密码不打印，安全第一
+    console.log('收到注册请求:', username);
 
     try {
-        // 1. 生成盐 (Salt): 就像炒菜加佐料，让密码更难被破解
         const salt = await bcrypt.genSalt(10);
-        
-        // 2. 加密密码: 把明文变成乱码
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // 3. 存入数据库: 注意这里存的是 hashedPassword
         const sql = 'INSERT INTO users (username, password) VALUES (?, ?)';
-        db.query(sql, [username, hashedPassword], (err, result) => {
-            if (err) {
-                console.error(err);
-                return res.status(500).json({ success: false, message: '注册失败 (可能用户名已存在)' });
-            }
-            res.status(200).json({ success: true, message: '注册成功!' });
-        });
+        // ⚡️删掉回调函数，直接用 await 执行查询
+        await db.query(sql, [username, hashedPassword]);
+
+        // 走到这里说明上一步的 SQL 执行成功了
+        res.status(200).json({ success: true, message: '注册成功!' });
     } catch (err) {
-        res.status(500).json({ success: false, message: '服务器加密出错' });
+        console.error('注册错误:', err);
+        // ⚡️ 修改点 2: 利用 try...catch 集中处理错误
+        // 如果是用户名重复，MySQL 会抛出 ER_DUP_ENTRY 错误
+        if (err.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ success: false, message: '用户名已存在' });
+        }
+        res.status(500).json({ success: false, message: '服务器内部错误' });
     }
 });
 
-
 // --- 登录接口 ---
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
-    // 1. 第一步: 只根据用户名查找用户
-    const sql = 'SELECT * FROM users WHERE username = ?';
-    
-    db.query(sql, [username], async (err, results) => {
-        if (err) return res.status(500).json({ success: false, message: '服务器错误' });
+    try { 
+        const sql = 'SELECT * FROM users WHERE username = ?';
+        
+        const [results] = await db.query(sql, [username]);
 
-        // 如果连人都没找到
         if (results.length === 0) {
             return res.json({ success: false, message: '用户不存在' });
         }
 
         const user = results[0];
 
-        // 2. 第二步: 比对密码 (关键步骤!)
-        // bcrypt.compare(用户输入的明文, 数据库里的乱码)
-        // 这是一个异步操作，会返回 true 或 false
+        // 比对密码 签发 Token
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (isMatch) {
-            // 密码正确！
-            // ⚡️ 新增: 生成 Token (数字身份证)
-            // payload: 身份证上写什么信息? (存 id 和 username)
-            // expiresIn: 有效期 (比如 1 小时后过期，需要重新登录)
             const token = jwt.sign(
                 { id: user.id, username: user.username }, 
                 SECRET_KEY, 
                 { expiresIn: '1h' }
             );
 
-            // 把 token 发给前端
             res.json({ 
                 success: true, 
                 message: '登录成功!', 
                 username: user.username,
-                token: token // <--- 这里把 token 发过去了
+                token: token
             });
         } else {
-            // 密码错误
             res.json({ success: false, message: '密码错误!' });
         }
-    });
+    } catch (err) {
+        // 集中捕获数据库连接断开、SQL 语法错等异常
+        console.error('登录查询错误:', err);
+        res.status(500).json({ success: false, message: '服务器错误' });
+    }
 });
 
 module.exports = router;
