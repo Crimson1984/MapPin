@@ -33,3 +33,4 @@ export function insertAtCursor(myField, myValue) {
     // 触发 input 事件 (让 Vue/React 等框架知道变了，虽然这里是原生 JS)
     myField.dispatchEvent(new Event('input'));
 }
+

@@ -11,43 +11,43 @@ const TILE_LAYERS_CONFIG = {
         options: { attribution: 'Tiles &copy; Esri' }
     },
 
-    carto_light: {
-        name: "🏳️ 灰色 (CartoDB)",
-        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        options: { attribution: '&copy; OpenStreetMap &copy; CartoDB', subdomains: 'abcd' }
-    },
+    // carto_light: {
+    //     name: "🏳️ 灰色 (CartoDB)",
+    //     url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    //     options: { attribution: '&copy; OpenStreetMap &copy; CartoDB', subdomains: 'abcd' }
+    // },
 
-    dark: {
-        name: "🌑 深色模式 (CartoDB)",
-        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        options: { attribution: '&copy; CartoDB' }
-    },
+    // dark: {
+    //     name: "🌑 深色模式 (CartoDB)",
+    //     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    //     options: { attribution: '&copy; CartoDB' }
+    // },
     gaode: {
         name: "🚗 高德地图 (有偏移)",
         url: 'http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
         options: { subdomains: "1234" }
-    },
-
-    // 2. [高对比] OSM 人道主义 (推荐！颜色好看)
-    osm_hot: {
-        name: "🔥 人道主义(OSM)",
-        url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-        options: { attribution: '&copy; OpenStreetMap contributors, Tiles style by Humanitarian OpenStreetMap Team hosted by OSM France' }
-    },
-
-    // 3. [功能] 骑行地图 (带等高线)
-    osm_cycle: {
-        name: "🚲 骑行与地形(OSM)",
-        url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
-        options: { attribution: '&copy; CyclOSM' }
-    },
-
-    // 4. [功能] 公共交通
-    osm_transport: {
-        name: "🚇 公共交通(OSM)",
-        url: 'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png',
-        options: { attribution: '&copy; ÖPNVkarte' }
     }
+
+    // // 2. [高对比] OSM 人道主义 (推荐！颜色好看)
+    // osm_hot: {
+    //     name: "🔥 人道主义(OSM)",
+    //     url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+    //     options: { attribution: '&copy; OpenStreetMap contributors, Tiles style by Humanitarian OpenStreetMap Team hosted by OSM France' }
+    // },
+
+    // // 3. [功能] 骑行地图 (带等高线)
+    // osm_cycle: {
+    //     name: "🚲 骑行与地形(OSM)",
+    //     url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+    //     options: { attribution: '&copy; CyclOSM' }
+    // },
+
+    // // 4. [功能] 公共交通
+    // osm_transport: {
+    //     name: "🚇 公共交通(OSM)",
+    //     url: 'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png',
+    //     options: { attribution: '&copy; ÖPNVkarte' }
+    // }
 
 };
 
@@ -91,24 +91,43 @@ let map = null; // 模块内部私有变量
 let markersLayer = null; // ⚡️ 新增：用于存放所有标记的容器
 
 export function initMap() {
+
+    // [读档]: 从浏览器记事本 (localStorage) 里读取用户上次的习惯
+    // 如果是第一次来没数据，就使用 || 后面的默认值
+    const savedCenter = JSON.parse(localStorage.getItem('MAPPIN_CENTER')) || [31.88, 118.82];
+    const savedZoom = parseInt(localStorage.getItem('MAPPIN_ZOOM'), 10) || 13;
+    const savedLayerKey = localStorage.getItem('MAPPIN_LAYER') || 'osm';
+
+
     //动态生成图层对象
     const layers = {};
     let defaultLayer = null;
+    
+    // 用来记录图层名字(name)和键值(key)的对应关系，方便存档
+    const layerNameToKey = {};
 
     // 遍历配置生成 Layer 实例
     for (const [key, config] of Object.entries(TILE_LAYERS_CONFIG)) {
         const layer = L.tileLayer(config.url, config.options);
         layers[config.name] = layer;
+        layerNameToKey[config.name] = key; // 建立反向映射字典
         
-        // 默认使用 OSM
-        if (key === 'osm') defaultLayer = layer;
+        // [应用图层习惯]: 如果当前遍历的 key 等于用户上次保存的图层，就把它设为默认
+        if (key === savedLayerKey) {
+            defaultLayer = layer;
+        }
+    }
+
+    // 防御性兜底：万一存的图层失效了，强行切回 osm
+    if (!defaultLayer && layers['osm']) {
+        defaultLayer = layers['osm'];
     }
 
     // 1. 初始化地图
     map = L.map('map', {
         doubleClickZoom: false,
-        center: [31.88, 118.82], 
-        zoom: 13,
+        center: savedCenter, 
+        zoom: savedZoom,
         zoomControl: false, // 我们先把默认的缩放控件关了，后面可以换位置
         layers: [defaultLayer]  // 默认显示的图层
     });
@@ -130,7 +149,24 @@ export function getMap() {
     return map;
 }
 
-// ⚡️ 新增：一键清空所有标记
+// --- 持久化状态保存函数 ---
+export function saveUserViewState(lat, lng) {
+    if (!lat || !lng) return;
+
+    // 1. 保存最后编辑/发布的坐标
+    localStorage.setItem('MAPPIN_CENTER', JSON.stringify([lat, lng]));
+
+    // 2. 获取当前地图真实的放大倍数并保存
+    const mapInstance = getMap();
+    if (mapInstance) {
+        localStorage.setItem('MAPPIN_ZOOM', mapInstance.getZoom());
+    }
+
+    console.log(`[状态持久化] 已记录最后活动坐标: ${lat}, ${lng}`);
+}
+
+
+// 清空所有标记
 export function clearMarkers() {
     if (markersLayer) {
         markersLayer.clearLayers(); // Leaflet 原生方法，瞬间清空

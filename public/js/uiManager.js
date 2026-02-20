@@ -1,6 +1,6 @@
 import { API } from './api.js';
 import { removeDraft } from './draftManager.js';
-import { closeMapPopup } from './mapManager.js';
+import { closeMapPopup, saveUserViewState } from './mapManager.js';
 
 
 // 定义模块私有变量 (替代原来的全局变量)
@@ -201,6 +201,8 @@ export function createQuickPopupContent(draft, onOpenFullEditor) {
             });
 
             if (res.success) {
+                saveUserViewState(draft.lat, draft.lng);
+
                 // 1. 删除本地草稿
                 removeDraft(draft);
                 
@@ -212,6 +214,9 @@ export function createQuickPopupContent(draft, onOpenFullEditor) {
 
                 // (可选) 显示个全局提示
                 // alert('发布成功'); 
+
+
+
             } else {
                 alert('发布失败: ' + res.message);
                 publishBtn.disabled = false;
