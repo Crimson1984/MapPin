@@ -1,0 +1,10 @@
+# 忽略环境变量文件
+.env
+
+# 忽略用户上传的资源和头像目录中的所有文件
+/uploads/resources/
+/uploads/avatars/
+# 但保留默认头像文件
+!/uploads/avatars/default-avatar.png
+
+.DS_Store
