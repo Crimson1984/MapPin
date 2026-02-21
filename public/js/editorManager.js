@@ -2,8 +2,6 @@ import { API } from './api.js';
 // 1. 引入档案管理员
 import { saveDraft as saveToStorage, removeDraft } from './draftManager.js';
 
-import {saveUserViewState} from './mapManager.js'
-
 import {debounce} from './utils.js'
 
 // 状态管理
@@ -287,8 +285,6 @@ export function saveDraft() {
     // 2. ⚡️ 调用管理员保存
     saveToStorage(editorState.currentDraft);
 
-    saveUserViewState(editorState.currentDraft.lat,editorState.currentDraft.lat);
-
     showStatus("草稿已保存");
 
     editorState.isDirty = false;
@@ -355,7 +351,6 @@ export async function saveEditorContent() {
 
         // window.insertMarkdown();
 
-        saveUserViewState(draft.lat,draft.lng);
 
         saveBtn.style.backgroundColor = 'var(--success-color)';
         saveBtn.innerHTML = '<span class="material-icons">check</span> 发布成功！';

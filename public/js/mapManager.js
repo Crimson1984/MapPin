@@ -26,7 +26,7 @@ const TILE_LAYERS_CONFIG = {
         name: "🚗 高德地图 (有偏移)",
         url: 'http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
         options: { subdomains: "1234" }
-    }
+    },
 
     // // 2. [高对比] OSM 人道主义 (推荐！颜色好看)
     // osm_hot: {
@@ -89,6 +89,7 @@ function getIconForNote(note, isDraft = false) {
 
 let map = null; // 模块内部私有变量
 let markersLayer = null; // ⚡️ 新增：用于存放所有标记的容器
+let userLocationMarker = null; //定位红点
 
 export function initMap() {
 
@@ -139,8 +140,141 @@ export function initMap() {
         collapsed: true         // 设为 false 可以让它永远展开(如果你喜欢)
     }).addTo(map);
 
-    // ⚡️ 初始化标记图层组，并添加到地图上
+    // 初始化标记图层组，并添加到地图上
     markersLayer = L.layerGroup().addTo(map);
+
+    // 自定义定位控件
+    const LocateControl = L.Control.extend({
+        options: {
+            position: 'bottomleft' // 同样放在左下角，Leaflet 会自动把它和上面两个排成一列
+        },
+        onAdd: function(map) {
+            // 创建一个 div 容器，赋予 Leaflet 原生的控制条 CSS 类名（这样它就自带白底和阴影了）
+            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+
+            const button = L.DomUtil.create('a', '', container);
+            button.href = '#'; // 伪链接
+            button.title = '定位'; // 鼠标悬停时的提示文字
+            button.style.display = 'flex';
+            button.style.justifyContent = 'center';
+            button.style.alignItems = 'center';
+            button.style.paddingLeft = '4px';
+
+            // 放入图标，稍微缩小一点字号配合 Leaflet 的小巧风格
+            button.innerHTML = '<span class="material-icons" style="font-size: 18px; color: #444;">my_location</span>';
+            // 🛡️ 核心细节：阻止点击事件穿透到底层的地图上
+            L.DomEvent.disableClickPropagation(button);
+            L.DomEvent.disableScrollPropagation(button); // 防止在按钮上滚动鼠标滚轮使地图缩放
+
+           // 监听点击事件
+            button.onclick = function(e) {
+                e.preventDefault(); 
+
+                // 1. 检查浏览器是否支持定位
+                if (!navigator.geolocation) {
+                    alert('您的浏览器不支持地理定位功能');
+                    return;
+                }
+
+                const iconSpan = button.querySelector('.material-icons');
+                
+                // 视觉反馈：将图标变成蓝色，让用户知道“正在拼命获取位置”
+                iconSpan.style.color = '#007bff'; 
+
+                // 2. 调用浏览器原生 API
+                navigator.geolocation.getCurrentPosition(
+                    // --- 🟢 成功回调 ---
+                    (position) => {
+                        iconSpan.style.color = '#444'; // 恢复图标原本颜色
+
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+
+                        console.log(`[定位成功] 坐标: ${lat}, ${lng}`);
+
+                        // 3. 视角飞跃 (flyTo)
+                        // 参数: [纬度, 经度], 缩放级别(16能看清街道), 动画配置
+                        map.flyTo([lat, lng], 16, {
+                            animate: true,
+                            duration: 1.5 // 飞行时间 1.5 秒
+                        });
+
+                        // 4. 红点标记 (单例模式)
+                        if (userLocationMarker) {
+                            // 💡 情况 A: 已经点过一次了，直接“瞬移”现有的红点，不创造新点
+                            userLocationMarker.setLatLng([lat, lng]);
+                        } else {
+                            // 💡 情况 B: 第一次点击，创建一个高级的 CSS 纯代码红点
+                            const redDotIcon = L.divIcon({
+                                className: 'my-location-icon',
+                                // 纯手写一个带白边、带阴影的红圆点
+                                html: '<div style="background-color: #e74c3c; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>',
+                                iconSize: [22, 22],
+                                iconAnchor: [11, 11] // 锚点在正中心
+                            });
+
+                            // 把红点加到地图上，并赋值给全局变量
+                            userLocationMarker = L.marker([lat, lng], { 
+                                icon: redDotIcon,
+                                zIndexOffset: 1002 // 保证我的位置永远在最顶层，不被别的笔记遮住
+                            }).addTo(map)
+                              .bindPopup('<b>📍 您当前的位置</b>'); // 附带一个小气泡
+                        }
+                    },
+                    // --- 🔴 失败回调 (异常兜底) ---
+                    (error) => {
+                        iconSpan.style.color = '#444'; // 恢复图标颜色
+                        
+                        let errorMsg = '定位失败';
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED: errorMsg = '您拒绝了定位权限请求，请在浏览器地址栏左侧修改权限。'; break;
+                            case error.POSITION_UNAVAILABLE: errorMsg = '当前位置信息不可用，可能没有 GPS 信号。'; break;
+                            case error.TIMEOUT: errorMsg = '获取位置超时。'; break;
+                        }
+                        alert(errorMsg);
+                        console.error('[定位失败]', error);
+                    },
+                    // --- ⚙️ 定位配置参数 ---
+                    {
+                        enableHighAccuracy: true, // 强制要求高精度 (使用设备硬件 GPS)
+                        timeout: 10000,           // 最多等 10 秒
+                        maximumAge: 0             // 拒绝使用浏览器缓存的旧位置
+                    }
+                );
+            };
+
+            return container;
+        }
+    });
+
+    // 把我们自定义的控件加到地图上
+    map.addControl(new LocateControl());
+
+    // ==========================================
+    // 💾 状态持久化：自动存档监听器
+    // ==========================================
+
+    // 1. 监听【图层切换】事件
+    map.on('baselayerchange', (e) => {
+        // e.name 是你在 TILE_LAYERS_CONFIG 里配置的中文/展示名称 (比如 "卫星图")
+        // 我们通过之前建好的 layerNameToKey 字典，把它翻译回内部的 key (比如 'satellite')
+        const layerKey = layerNameToKey[e.name];
+        
+        if (layerKey) {
+            localStorage.setItem('MAPPIN_LAYER', layerKey);
+        }
+    });
+
+    // 2. 监听【地图移动或缩放结束】事件
+    // moveend 包含了拖拽结束和缩放(zoom)结束，是记录视野的最佳时机
+    map.on('moveend', () => {
+        const currentCenter = map.getCenter();
+        const currentZoom = map.getZoom();
+        
+        // 坐标需要转成字符串数组存入，缩放倍数直接存数字
+        localStorage.setItem('MAPPIN_CENTER', JSON.stringify([currentCenter.lat, currentCenter.lng]));
+        localStorage.setItem('MAPPIN_ZOOM', currentZoom);
+    });
 
     return map; // 返回实例供其他模块使用
 }
@@ -149,21 +283,21 @@ export function getMap() {
     return map;
 }
 
-// --- 持久化状态保存函数 ---
-export function saveUserViewState(lat, lng) {
-    if (!lat || !lng) return;
+// // --- 持久化状态保存函数 ---
+// export function saveUserViewState(lat, lng) {
+//     if (!lat || !lng) return;
 
-    // 1. 保存最后编辑/发布的坐标
-    localStorage.setItem('MAPPIN_CENTER', JSON.stringify([lat, lng]));
+//     // 1. 保存最后编辑/发布的坐标
+//     localStorage.setItem('MAPPIN_CENTER', JSON.stringify([lat, lng]));
 
-    // 2. 获取当前地图真实的放大倍数并保存
-    const mapInstance = getMap();
-    if (mapInstance) {
-        localStorage.setItem('MAPPIN_ZOOM', mapInstance.getZoom());
-    }
+//     // 2. 获取当前地图真实的放大倍数并保存
+//     const mapInstance = getMap();
+//     if (mapInstance) {
+//         localStorage.setItem('MAPPIN_ZOOM', mapInstance.getZoom());
+//     }
 
-    console.log(`[状态持久化] 已记录最后活动坐标: ${lat}, ${lng}`);
-}
+//     console.log(`[状态持久化] 已记录最后活动坐标: ${lat}, ${lng}`);
+// }
 
 
 // 清空所有标记

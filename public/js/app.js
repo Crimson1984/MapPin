@@ -6,7 +6,6 @@ import { initMap,
     closeMapPopup,
     fitToMarkers,
     addDraftMarker,
-    saveUserViewState 
 } from './mapManager.js';
 
 import { renderReadMode, 
@@ -155,7 +154,6 @@ async function loadNotes(targetUser = null) {
                 
                 // 记录当前状态
                 window.currentNote = clickedNote;
-                saveUserViewState(clickedNote.lat,clickedNote.lng);
                 
             });
         });
@@ -188,7 +186,6 @@ function renderDrafts() {
         addDraftMarker(draft, (clickedDraft) => {
             // 点击灰色标记 -> 直接打开编辑器
             console.log("继续编辑草稿:", clickedDraft.title);
-            saveUserViewState();
             openEditor({ note: clickedDraft });
         });
     });
