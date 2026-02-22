@@ -1,3 +1,5 @@
+import { toView, isCoordinateSystemChanged } from './coordManager.js';
+
 const TILE_LAYERS_CONFIG = {
     osm: {
         name: "🗺️ 标准地图 (OSM)",
@@ -192,9 +194,12 @@ export function initMap() {
 
                         console.log(`[定位成功] 坐标: ${lat}, ${lng}`);
 
+                        // 坐标转换
+                        const [viewLat, viewLng] = toView(lat, lng);
+
                         // 3. 视角飞跃 (flyTo)
                         // 参数: [纬度, 经度], 缩放级别(16能看清街道), 动画配置
-                        map.flyTo([lat, lng], 16, {
+                        map.flyTo([viewLat, viewLng], 16, {
                             animate: true,
                             duration: 1.5 // 飞行时间 1.5 秒
                         });
@@ -202,7 +207,7 @@ export function initMap() {
                         // 4. 红点标记 (单例模式)
                         if (userLocationMarker) {
                             // 💡 情况 A: 已经点过一次了，直接“瞬移”现有的红点，不创造新点
-                            userLocationMarker.setLatLng([lat, lng]);
+                            userLocationMarker.setLatLng([viewLat, viewLng]);
                         } else {
                             // 💡 情况 B: 第一次点击，创建一个高级的 CSS 纯代码红点
                             const redDotIcon = L.divIcon({
@@ -214,7 +219,7 @@ export function initMap() {
                             });
 
                             // 把红点加到地图上，并赋值给全局变量
-                            userLocationMarker = L.marker([lat, lng], { 
+                            userLocationMarker = L.marker([viewLat, viewLng], { 
                                 icon: redDotIcon,
                                 zIndexOffset: 1002 // 保证我的位置永远在最顶层，不被别的笔记遮住
                             }).addTo(map)
@@ -258,10 +263,17 @@ export function initMap() {
     map.on('baselayerchange', (e) => {
         // e.name 是你在 TILE_LAYERS_CONFIG 里配置的中文/展示名称 (比如 "卫星图")
         // 我们通过之前建好的 layerNameToKey 字典，把它翻译回内部的 key (比如 'satellite')
-        const layerKey = layerNameToKey[e.name];
+        const newLayerKey = layerNameToKey[e.name];
         
-        if (layerKey) {
-            localStorage.setItem('MAPPIN_LAYER', layerKey);
+        if (newLayerKey) {
+            // 1. 拿出旧记录
+            const oldLayerKey = localStorage.getItem('MAPPIN_LAYER') || 'osm';
+            // 2. 存入新记录
+            localStorage.setItem('MAPPIN_LAYER', newLayerKey);
+            // 3. 检测
+            if (isCoordinateSystemChanged(oldLayerKey, newLayerKey)) {
+                if (window.loadNotes) window.loadNotes(); 
+            } 
         }
     });
 
@@ -314,9 +326,11 @@ export function addMarker(note, onClickCallback) {
     // 获取统一图标
     const icon = getIconForNote(note, false);
 
+    // 如果为火星坐标系,进行坐标转换
+    const [viewLat, viewLng] = toView(note.lat, note.lng);
 
     // 创建标记
-    const marker = L.marker([note.lat, note.lng], { icon: icon }).addTo(markersLayer);
+    const marker = L.marker([viewLat, viewLng], { icon: icon }).addTo(markersLayer);
     
     // 绑定点击事件
     if (onClickCallback) {
@@ -355,7 +369,10 @@ export function addDraftMarker(draft, onClick) {
 
     const icon = getIconForNote(draft, true);
 
-    const marker = L.marker([draft.lat, draft.lng], {
+    // 如果为火星坐标系,进行坐标转换
+    const [viewLat, viewLng] = toView(draft.lat, draft.lng);
+
+    const marker = L.marker([viewLat, viewLng], {
         icon: icon,
         opacity: 0.7, // ⚡️ 草稿稍微透明一点，以示区别
         zIndexOffset: 500 // ⚡️ 让草稿浮在普通标记上面 (可选)

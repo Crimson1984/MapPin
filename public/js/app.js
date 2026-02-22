@@ -30,6 +30,8 @@ import { openEditor, closeEditor } from './editorManager.js';
 
 import { createDraft, loadDraft, getAllNewDrafts } from './draftManager.js';
 
+import { toDB } from './coordManager.js'; //坐标转换函数
+
 // --- 全局变量与初始化 ---
 let map = null;
 let currentUser = null;
@@ -193,7 +195,10 @@ function renderDrafts() {
 
 function onMapDoubleClick(e) {
     window.closeCard();
-    const { lat, lng } = e.latlng;
+
+    //如果是高德地图,进行坐标转换
+    const [realLat, realLng] = toDB(e.latlng.lat, e.latlng.lng);
+    const lat = realLat, lng = realLng;
     
     // 📝 查询档案：该位置是否有未完成的草稿？没有则新建。
     // draftManager.loadDraft 会根据坐标生成 key 查找 localStorage
