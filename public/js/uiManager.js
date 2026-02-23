@@ -15,7 +15,7 @@ function getFooterButtons(note) {
     // 如果是作者本人，显示编辑和删除按钮
     if (currentUsername && note.username === currentUsername) {
         return `
-            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <div class="flex-row-end">
                 <button onclick="window.enableEditMode(${note.id})" class="btn btn-secondary">
                     <span class="material-icons">edit</span> 编辑
                 </button>
@@ -40,14 +40,10 @@ function getFooterButtons(note) {
 export function createQuickPopupContent(draft, onOpenFullEditor) {
     const container = document.createElement('div');
     container.className = 'quick-popup-container';
-    container.style.padding = '10px';
-    container.style.minWidth = '260px'; // 稍微宽一点以容纳两个按钮
-    container.style.textAlign = 'center';
 
     // 1. 标题头
     const header = document.createElement('h3');
-    header.style.margin = '0 0 10px 0';
-    header.style.fontSize = '16px';
+    header.className = 'quick-popup-header';
     header.innerHTML = '<span class="material-icons" style="font-size:18px; vertical-align:text-bottom; color:var(--primary-color);">edit_location</span> 新建笔记';
     container.appendChild(header);
 
@@ -85,14 +81,12 @@ export function createQuickPopupContent(draft, onOpenFullEditor) {
 
     // 5. 按钮容器
     const btnContainer = document.createElement('div');
-    btnContainer.style.display = 'flex';
-    btnContainer.style.gap = '8px';
+    btnContainer.className = 'flex-row-center';
 
     // --- 按钮 A: 详细编辑 (灰色/次要) ---
     const fullEditorBtn = document.createElement('button');
     fullEditorBtn.className = 'btn btn-secondary'; // 改为次要样式
     fullEditorBtn.style.flex = '1';
-    fullEditorBtn.style.padding = '6px 10px';
     fullEditorBtn.innerHTML = '<span class="material-icons" style="font-size:16px">open_in_full</span> 详细';
     
     fullEditorBtn.addEventListener('click', () => {
@@ -112,7 +106,6 @@ export function createQuickPopupContent(draft, onOpenFullEditor) {
     const publishBtn = document.createElement('button');
     publishBtn.className = 'btn btn-primary'; // 主要样式
     publishBtn.style.flex = '1.5'; // 让发布按钮稍微宽一点
-    publishBtn.style.padding = '6px 10px';
     publishBtn.innerHTML = '<span class="material-icons" style="font-size:16px">send</span> 发布';
 
     // ⚡️ 绑定直接发布逻辑
@@ -271,38 +264,69 @@ export function hideFloatingCard() {
 
 // 生成用户搜索结果列表 HTML
 export function renderSearchResults(users, currentUsername) {
-    if (!users || users.length === 0) return '<div style="padding:5px; color:#999;">无结果</div>';
+    // 1. 使用分离出的 CSS 类渲染空状态
+    if (!users || users.length === 0) {
+        return '<div class="search-empty-state">未找到相关用户</div>';
+    }
 
+    // 2. 渲染列表
     return users.map(user => {
         // 不显示自己
         if (user.username === currentUsername) return '';
-        
-        // 返回列表项 HTML
+
+        let actionHtml = '';
+        if (user.relation === 'friend') {
+            // 已是好友 -> 显示纯文本状态，不可点击
+            actionHtml = `
+                <span style="font-size:12px; color:var(--text-secondary); display:flex; align-items:center;">
+                    <span class="material-icons" style="font-size:16px; margin-right:4px;">people</span>已是好友
+                </span>`;
+        } else if (user.relation === 'pending') {
+            // 等待验证 -> 显示警告色文本
+            actionHtml = `
+                <span style="font-size:12px; color:var(--warning-color); display:flex; align-items:center;">
+                    <span class="material-icons" style="font-size:16px; margin-right:4px;">hourglass_empty</span>等待验证
+                </span>`;
+        } else {
+            // 陌生人 -> 显示“加好友”按钮
+            actionHtml = `
+                <button onclick="event.stopPropagation(); window.sendFriendRequest('${user.username}')" class="btn btn-primary btn-sm">
+                    <span class="material-icons">person_add</span>加好友
+                </button>`;
+        }
+
+        // 返回拼装好的列表项
         return `
-        <div class="search-item" style="display:flex; justify-content:space-between; align-items:center; padding: 10px; border-bottom: 1px solid var(--border-color);">
-            <span onclick="window.visitUser('${user.username}')" style="cursor:pointer; flex-grow:1; display:flex; align-items:center;">
-                <span class="material-icons" style="color:#666;">person</span> ${user.username}
-            </span>
+        <div class="user-list-item">
+            <div class="user-list-info" onclick="window.visitUser('${user.username}')">
+                
+                <div class="user-list-avatar-placeholder">
+                    <span class="material-icons">person</span>
+                </div>
+                
+                <div class="user-list-text">
+                    <div class="name">${user.username}</div>
+                </div>
+            </div>
             
-            <button onclick="event.stopPropagation(); window.sendFriendRequest('${user.username}')" 
-                    class="btn btn-primary" style="padding: 2px 8px; font-size: 12px;">
-                <span class="material-icons" style="font-size:14px;">person_add</span> 加好友
-            </button>
-        </div>
-        `;
+            <div class="user-list-actions">
+                ${actionHtml} </div>
+        </div>`;
     }).join('');
 }
 
-// 控制“正在访问”横幅的显示/隐藏
+
+// --- 控制“正在访问”横幅的显示/隐藏 ---
 export function toggleVisitBanner(visible, targetName = '') {
     const banner = document.getElementById('visiting-banner');
     const nameSpan = document.getElementById('visit-name');
     
+    // 告别 banner.style.display，使用更优雅的 classList 切换
     if (visible) {
-        banner.style.display = 'flex';
         if (nameSpan) nameSpan.innerText = targetName;
+        banner.classList.add('active'); // CSS 会通过 display: flex 和 keyframes 动画接管显示
     } else {
-        banner.style.display = 'none';
+        banner.classList.remove('active'); // CSS 会恢复 display: none
     }
 }
 
@@ -319,19 +343,14 @@ export function renderInboxList(requests) {
 
     // 生成列表
     return requests.map(req => `
-        <div style="padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
-            <div style="display:flex; align-items:center;">
-                <span class="material-icons" style="color:#007bff; margin-right:4px;">account_circle</span>
-                <b>${req.requester}</b>
+        <div class="user-list-item">
+            <div class="user-list-info">
+                <span class="material-icons" style="color:#007bff; margin-right:8px;">account_circle</span>
+                <div class="user-list-text"><div class="name">${req.requester}</div></div>
             </div>
-            <div style="display:flex; gap:5px;">
-                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;" onclick="window.respondToRequest(${req.id}, 'accepted')">
-                    <span class="material-icons" style="font-size: 16px;">check</span>同意
-                </button>
-
-                <button class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="window.respondToRequest(${req.id}, 'rejected')">
-                    <span class="material-icons" style="font-size: 16px;">close</span>拒绝
-                </button>
+            <div class="user-list-actions">
+                <button class="btn btn-primary btn-sm" onclick="window.respondToRequest(${req.id}, 'accepted')"><span class="material-icons">check</span>同意</button>
+                <button class="btn btn-danger btn-sm" onclick="window.respondToRequest(${req.id}, 'rejected')"><span class="material-icons">close</span>拒绝</button>
             </div>
         </div>
     `).join('');
@@ -379,6 +398,12 @@ export function updateUserProfileUI(user) {
             avatarEl.src = user.avatar.startsWith('http') ? user.avatar : (SERVER_URL + user.avatar);
         } else {
             avatarEl.src = `${SERVER_URL}/uploads/avatars/default-avatar.png`;
+        }
+
+        avatarEl.onclick = () => {
+            if (window.openProfileDrawer) {
+                window.openProfileDrawer(user.username);
+            }
         }
     }
 }
@@ -592,22 +617,17 @@ export async function loadAndRenderFriendsNetwork() {
             html += pendingRequests.map(req => {
                 const avatar = req.avatar ? (req.avatar.startsWith('http') ? req.avatar : `${req.avatar}`) : '/uploads/avatars/default-avatar.png';
                 return `
-                <div class="friend-item" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
-                    <div style="display:flex; align-items:center; cursor:pointer;" onclick="window.openProfileDrawer('${req.requester}')">
-                        <img src="${avatar}" style="width:40px; height:40px; border-radius:50%; margin-right:10px; object-fit:cover;">
-                        <div>
-                            <div style="font-weight:bold; color:#333;">${req.requester}</div>
-                            <div style="font-size:12px; color:#888;">申请添加你为好友</div>
+                <div class="user-list-item">
+                    <div class="user-list-info" onclick="window.openProfileDrawer('${req.requester}')">
+                        <img src="${avatar}" class="user-list-avatar">
+                        <div class="user-list-text">
+                            <div class="name">${req.requester}</div>
+                            <div class="sub">申请添加你为好友</div>
                         </div>
                     </div>
-                    <div style="display:flex; gap:5px;">
-                        <button class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;" onclick="window.respondToRequest(${req.id}, 'accepted')">
-                            <span class="material-icons" style="font-size: 16px;">check</span>同意
-                        </button>
-
-                        <button class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="window.respondToRequest(${req.id}, 'rejected')">
-                            <span class="material-icons" style="font-size: 16px;">close</span>拒绝
-                        </button>
+                    <div class="user-list-actions">
+                        <button class="btn btn-primary btn-sm" onclick="window.respondToRequest(${req.id}, 'accepted')"><span class="material-icons">check</span>同意</button>
+                        <button class="btn btn-danger btn-sm" onclick="window.respondToRequest(${req.id}, 'rejected')"><span class="material-icons">close</span>拒绝</button>
                     </div>
                 </div>`;
             }).join('');
@@ -621,21 +641,17 @@ export async function loadAndRenderFriendsNetwork() {
             html += friends.map(friend => {
                 const avatar = friend.avatar ? (friend.avatar.startsWith('http') ? friend.avatar : `${friend.avatar}`) : '/uploads/avatars/default-avatar.png';
                 return `
-                <div class="friend-item" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; cursor:pointer;" onclick="window.openProfileDrawer('${friend.username}')">
-                    
-                    <div style="display:flex; align-items:center;">
-                        <img src="${avatar}" style="width:40px; height:40px; border-radius:50%; margin-right:10px; object-fit:cover;">
-                        <div>
-                            <div style="font-weight:bold; color:#333;">${friend.username}</div>
-                            <div style="font-size:12px; color:#888;">${friend.bio || '这个人很懒，什么都没写~'}</div>
+                <div class="user-list-item" onclick="window.openProfileDrawer('${friend.username}')" style="cursor:pointer;">
+                    <div class="user-list-info">
+                        <img src="${avatar}" class="user-list-avatar">
+                        <div class="user-list-text">
+                            <div class="name">${friend.username}</div>
+                            <div class="sub">${friend.bio || '这个人很懒，什么都没写~'}</div>
                         </div>
                     </div>
-
-                    <button class="btn-danger" style="padding: 4px 8px; font-size: 12px; opacity: 0.8;" 
-                        onclick="event.stopPropagation(); window.handleRemoveFriend('${friend.username}')">
-                        删除
-                    </button>
-
+                    <div class="user-list-actions">
+                        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); window.handleRemoveFriend('${friend.username}')">删除</button>
+                    </div>
                 </div>`;
             }).join('');
         }

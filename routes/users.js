@@ -9,17 +9,46 @@ const path = require('path');
 
 // --- 搜索用户接口 ---
 router.get('/search', authenticateToken, async (req, res) => {
-    const query = req.query.q;
-    if (!query) return res.json([]);
+    const keyword = `%${req.query.q || ''}%`; // 获取搜索词
+    const myName = req.user.username;        // 当前登录用户
 
-    const sql = 'SELECT id, username, avatar, bio FROM users WHERE username LIKE ? LIMIT 10';
-    
     try {
-        const [results] = await db.query(sql, [`%${query}%`]);
-        res.json(results);
+        const sql = `
+            SELECT 
+                u.username, 
+                u.avatar, 
+                f.status as friend_status,
+                f.requester
+            FROM users u
+            LEFT JOIN friendships f ON 
+                (f.requester = ? AND f.receiver = u.username) OR 
+                (f.receiver = ? AND f.requester = u.username)
+            WHERE u.username LIKE ? AND u.username != ?
+            LIMIT 15
+        `;
+        const [users] = await db.query(sql, [myName, myName, keyword, myName]);
+
+        const results = users.map(u => {
+            let relation = 'none';
+            if (u.friend_status === 'accepted') {
+                relation = 'friend';
+            } else if (u.friend_status === 'pending') {
+                relation = 'pending';
+            }
+
+            return {
+                username: u.username,
+                avatar: u.avatar,
+                relation: relation // ⚡️ 把关系状态发给前端
+            };
+        });
+
+        // 返回给前端 (注意检查你的前端 API 期望的数据格式是 res.json(results) 还是 {data: results})
+        res.json(results); 
+
     } catch (err) {
-        console.error('搜索用户失败:', err);
-        res.status(500).json({ error: '服务器内部错误' });
+        console.error('搜索出错:', err);
+        res.status(500).json({ error: '服务器错误' });
     }
 });
 

@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>MapPin - By Garvofadge</title>
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
@@ -22,27 +22,18 @@
     
     <div id="map"></div>
 
-    <div id="user-profile" style="position:absolute; top:20px; right:20px; z-index:1000; text-align:right; display:flex; flex-direction:column; align-items:flex-end;">
-        
+    <div id="user-profile" class="user-profile-container">
         <img id="my-avatar" src="/uploads/avatars/default-avatar.png" 
-             class="avatar avatar-md"
-             style="cursor:pointer; background: white;"
-             onclick="document.getElementById('avatar-input').click()" 
-             title="点击更换头像">
+            class="avatar avatar-md">
         
         <input type="file" id="avatar-input" accept="image/*" hidden 
-               onchange="window.handleAvatarSelected(this)">
+            onchange="window.handleAvatarSelected(this)">
         
-        <div id="my-username" 
-            style="background:rgba(255,255,255,0.9); padding:4px 8px; border-radius:4px; font-weight:bold; margin-top:5px; box-shadow: var(--shadow-sm); cursor:pointer;"
-            title="查看我的主页"
-            onmouseover="this.style.color='#007bff'" 
-            onmouseout="this.style.color='#333'"
-            >Loading...</div>
-
+        <div id="my-username" class="profile-username-badge"
+            title="查看我的主页">Loading...</div>
     </div>
 
-    <div id="search-container">
+    <!-- <div id="search-container">
         <input type="text" id="user-search" class="form-control" placeholder="🔍 搜索用户..." autocomplete="off">
         
         <div id="search-results"></div> 
@@ -61,6 +52,38 @@
             
             <div id="inbox-list" style="display:none;"></div>
         </div>
+    </div> -->
+
+    <div id="search-container" class="mobile-tools-container">
+    
+        <div class="tool-wrapper search-wrapper">
+            <input type="text" id="user-search" class="form-control" placeholder="🔍 搜索用户..." autocomplete="off">
+            <div id="search-results"></div>
+        </div>
+
+        <div class="tool-wrapper inbox-wrapper">
+            <button id="inbox-btn" class="btn btn-secondary" onclick="window.toggleInbox()">
+                <span class="flex-center">
+                    <span class="material-icons">mail</span>
+                    <span class="inbox-text">好友请求</span>
+                </span>
+                <span id="request-count" class="badge">(0)</span>
+            </button>
+            <div id="inbox-list" style="display:none;"></div>
+        </div>
+
+        <div id="visiting-banner" class="visiting-banner">
+            <span class="visiting-banner-text">
+                <span class="material-icons" style="font-size: 16px;">visibility</span>
+                <span class="hide-mobile">正在浏览: </span>
+                <b id="visit-name" class="visit-name-text"></b>
+            </span>
+            <button class="btn btn-secondary btn-sm visit-exit-btn" onclick="window.exitVisitMode()">
+                <span class="material-icons" style="font-size: 14px; margin-right: 2px;">logout</span>
+                <span class="hide-mobile">退出</span>
+            </button>
+        </div>
+
     </div>
 
     <div id="floating-card" class="hidden">
