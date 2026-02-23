@@ -827,3 +827,130 @@ select.form-control {
     border-radius: 4px;
     overflow-x: auto;
 }
+
+/* ========================================== */
+/* 👤 个人主页抽屉样式 (Profile Drawer) */
+/* ========================================== */
+
+/* 遮罩层 (默认隐藏) */
+.drawer-backdrop {
+    position: fixed;
+    top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 2000; /* 必须高于 Leaflet 地图的 1000 */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+.drawer-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* 抽屉面板 (默认藏在屏幕右侧外面) */
+.profile-drawer {
+    position: fixed;
+    top: 0; right: -400px; /* 藏起来 */
+    width: 380px; height: 100vh;
+    background: #fff;
+    box-shadow: -5px 0 15px rgba(0,0,0,0.1);
+    z-index: 2001;
+    display: flex;
+    flex-direction: column;
+    transition: right 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* 丝滑滑入动画 */
+}
+/* 当被激活时，抽屉滑入屏幕 */
+.profile-drawer.open {
+    right: 0;
+}
+
+/* 抽屉头部 */
+.drawer-header {
+    padding: 15px;
+    display: flex;
+    justify-content: flex-end;
+}
+.icon-btn {
+    background: none; border: none; cursor: pointer;
+    color: #666; padding: 5px; border-radius: 50%;
+}
+.icon-btn:hover { background: #f0f0f0; }
+
+/* 资料展示区 */
+.profile-info-section {
+    text-align: center;
+    padding: 0 20px 20px;
+}
+.profile-large-avatar {
+    width: 100px; height: 100px;
+    border-radius: 50%; object-fit: cover;
+    border: 3px solid #fff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    margin-bottom: 10px;
+}
+.profile-name { margin: 0 0 5px; font-size: 1.5rem; color: #333; }
+.profile-bio { margin: 0; font-size: 0.9rem; color: #777; line-height: 1.4; }
+
+/* 按钮区 */
+.profile-actions {
+    padding: 0 20px 20px;
+    display: flex; justify-content: center; gap: 10px;
+}
+
+/* 选项卡 Tabs */
+.profile-tabs {
+    display: flex;
+    border-bottom: 1px solid #eee;
+    background: #fafafa;
+}
+.tab-item {
+    flex: 1; text-align: center; padding: 12px 0;
+    font-size: 0.95rem; color: #666; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+.tab-item:hover { color: #007bff; background: #f0f4ff; }
+.tab-item.active {
+    color: #007bff; font-weight: bold;
+    border-bottom-color: #007bff; background: #fff;
+}
+
+/* Tab 内容区 */
+.profile-content {
+    flex: 1; /* 占满剩余高度 */
+    overflow-y: auto; /* 内容多了可以滚动 */
+    padding: 20px;
+    background: #f9f9f9;
+}
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* 搜索下拉框美化 (针对你提到的“搜索框带头像”) */
+.search-result-item {
+    display: flex; align-items: center; padding: 10px;
+    border-bottom: 1px solid #eee; cursor: pointer;
+    transition: background 0.2s;
+}
+.search-result-item:hover { background: #f0f4ff; }
+.search-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    object-fit: cover; margin-right: 12px;
+}
+.search-info h4 { margin: 0 0 3px; font-size: 1rem; color: #333; }
+.search-info p { margin: 0; font-size: 0.8rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+
+/* 资料编辑框样式 */
+.profile-bio-edit {
+    width: 90%;
+    height: 60px;
+    margin: 10px auto;
+    padding: 8px;
+    border: 1px solid #007bff;
+    border-radius: 6px;
+    resize: none; /* 禁止拖拽缩放 */
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: #333;
+    outline: none;
+}

@@ -19,10 +19,10 @@ router.post('/request', authenticateToken, async (req, res) => {
         // ⚡️ 修改点 3: 第一次查询 (用 await 等待，解构出 results)
         const [results] = await db.query(sqlCheck, [requester, receiver, receiver, requester]);
 
+        console.log(`[好友申请] ${requester} 向 ${receiver}`);
+
         if (results.length > 0) {
             const rel = results[0];
-
-            console.log(`[好友申请] ${requester} 向 ${receiver}`);
 
             if (rel.status === 'accepted') {
                 return res.json({ success: false, message: '你们已经是好友了' });
@@ -43,6 +43,7 @@ router.post('/request', authenticateToken, async (req, res) => {
             const sqlInsert = 'INSERT INTO friendships (requester, receiver, status) VALUES (?, ?, "pending")';
             // ⚡️ 修改点 5: 同样消灭回调，直接 await
             await db.query(sqlInsert, [requester, receiver]);
+
             return res.json({ success: true, message: '好友申请已发送!' });
         }
     } catch (err) {
@@ -78,6 +79,70 @@ router.put('/response', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('处理好友请求失败:', err);
         res.status(500).json({ success: false, message: '操作失败' });
+    }
+});
+
+router.put('/remove', authenticateToken, async (req, res) => {
+    const myName = req.user.username;
+    const { username: targetName } = req.body; // 前端传过来要删除的人
+
+    try {
+        const sql = `
+            UPDATE friendships SET status = 'rejected'
+            WHERE status = 'accepted' 
+            AND (
+                (requester = ? AND receiver = ?) OR 
+                (requester = ? AND receiver = ?)
+            )
+        `;
+        await db.query(sql, [myName, targetName, targetName, myName]);
+        
+        console.log(`[删除好友] ${myName} 向 ${targetName}`)
+
+        res.json({ success: true, message: '已解除好友关系' });
+    } catch (err) {
+        console.error('删除好友失败:', err);
+        res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+});
+
+// 该接口仅依靠 req.user.username，前端无法伪造
+router.get('/my-network', authenticateToken, async (req, res) => {
+    const myName = req.user.username;
+
+    try {
+        // 查询 1：查出别人发给我的、还在 pending 的请求，并 JOIN users 表获取对方头像
+        const pendingSql = `
+            SELECT f.id, f.requester, u.avatar, u.bio 
+            FROM friendships f
+            JOIN users u ON f.requester = u.username
+            WHERE f.receiver = ? AND f.status = 'pending'
+        `;
+        const [pendingRequests] = await db.query(pendingSql, [myName]);
+
+        // 查询 2：查出我的所有好友 (双向查询：可能我是发起方，也可能我是接收方)
+        // 并且 JOIN users 表查出他们的详细信息 (排除自己)
+        const friendsSql = `
+            SELECT u.username, u.avatar, u.bio
+            FROM users u
+            JOIN friendships f ON (
+                (f.requester = ? AND f.receiver = u.username) OR 
+                (f.receiver = ? AND f.requester = u.username)
+            )
+            WHERE f.status = 'accepted' AND u.username != ?
+        `;
+        const [friendsList] = await db.query(friendsSql, [myName, myName, myName]);
+
+        // 将两波数据一起打包发送给前端
+        res.json({
+            success: true,
+            pendingRequests: pendingRequests,
+            friends: friendsList
+        });
+
+    } catch (err) {
+        console.error('获取关系失败:', err);
+        res.status(500).json({ success: false, message: '服务器获取关系失败' });
     }
 });
 

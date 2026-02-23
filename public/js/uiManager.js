@@ -35,66 +35,7 @@ function getFooterButtons(note) {
  * @param {Object} draft - 当前草稿对象 (可能包含 title, content)
  * @param {Function} onOpenFullEditor - 回调函数 (draft) => void
  */
-// export function createQuickPopupContent(draft, onOpenFullEditor) {
-//     const container = document.createElement('div');
-//     container.className = 'quick-popup-container';
-//     container.style.padding = '10px';
-//     container.style.minWidth = '240px';
-//     container.style.textAlign = 'center';
 
-//     // 标题
-//     const header = document.createElement('h3');
-//     header.style.margin = '0 0 10px 0';
-//     header.style.fontSize = '16px';
-//     header.innerHTML = '<span class="material-icons" style="font-size:18px; vertical-align:text-bottom; color:var(--primary-color);">edit_location</span> 新建笔记';
-//     container.appendChild(header);
-
-//     // 标题输入
-//     const titleInput = document.createElement('input');
-//     titleInput.className = 'form-control';
-//     titleInput.placeholder = '标题...';
-//     titleInput.style.marginBottom = '8px';
-//     titleInput.value = draft.title || ''; // 回填草稿数据
-//     container.appendChild(titleInput);
-
-//     // 内容输入
-//     const contentInput = document.createElement('textarea');
-//     contentInput.className = 'form-control';
-//     contentInput.placeholder = '写点什么...';
-//     contentInput.style.height = '60px';
-//     contentInput.style.resize = 'none';
-//     contentInput.style.marginBottom = '10px';
-//     contentInput.value = draft.content || ''; // 回填草稿数据
-//     container.appendChild(contentInput);
-
-//     // 按钮容器
-//     const btnContainer = document.createElement('div');
-//     btnContainer.style.display = 'flex';
-//     btnContainer.style.gap = '10px';
-
-//     // "详细编辑" 按钮
-//     const fullEditorBtn = document.createElement('button');
-//     fullEditorBtn.className = 'btn btn-primary';
-//     fullEditorBtn.style.flex = '1';
-//     fullEditorBtn.innerHTML = '<span class="material-icons">edit_note</span> 详细编辑';
-    
-//     // ⚡️ 绑定点击事件：收集数据并通过回调传出去
-//     fullEditorBtn.addEventListener('click', () => {
-//         // 更新草稿数据
-//         draft.title = titleInput.value;
-//         draft.content = contentInput.value;
-        
-//         // 触发回调
-//         if (typeof onOpenFullEditor === 'function') {
-//             onOpenFullEditor(draft);
-//         }
-//     });
-
-//     btnContainer.appendChild(fullEditorBtn);
-//     container.appendChild(btnContainer);
-
-//     return container;
-// }
 
 export function createQuickPopupContent(draft, onOpenFullEditor) {
     const container = document.createElement('div');
@@ -262,7 +203,7 @@ export function renderReadMode(note) {
     return `
         <h2 id="card-title">${note.title}</h2>
         <div class="meta-info">
-            <span>${note.username}</span> | 
+            <span><a onclick="window.openProfileDrawer('${note.username}')" style="color: #007bff; text-decoration: none; font-weight: bold;">${note.username}</a></span> | 
             <span>${new Date(note.created_at).toLocaleDateString()}</span>
         </div>
         <div id="card-body" class="markdown-body" style="margin-top:15px; line-height:1.6;">
@@ -384,11 +325,12 @@ export function renderInboxList(requests) {
                 <b>${req.requester}</b>
             </div>
             <div style="display:flex; gap:5px;">
-                <button onclick="window.respondToRequest(${req.id}, 'accepted')" class="btn btn-icon" style="color:var(--success-color);" title="同意">
-                    <span class="material-icons">check_circle</span>
+                <button class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;" onclick="window.respondToRequest(${req.id}, 'accepted')">
+                    <span class="material-icons" style="font-size: 16px;">check</span>同意
                 </button>
-                <button onclick="window.respondToRequest(${req.id}, 'rejected')" class="btn btn-icon" style="color:var(--danger-color);" title="拒绝">
-                    <span class="material-icons">cancel</span>
+
+                <button class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="window.respondToRequest(${req.id}, 'rejected')">
+                    <span class="material-icons" style="font-size: 16px;">close</span>拒绝
                 </button>
             </div>
         </div>
@@ -421,8 +363,15 @@ export function updateUserProfileUI(user) {
     const SERVER_URL = ''; // 或者从配置里读
 
     // 更新名字
-    if (nameEl) nameEl.innerText = user.username;
-
+    if (nameEl) {
+        nameEl.innerText = user.username;
+        // 点击后打开该用户的个人主页抽屉
+        nameEl.onclick = () => {
+            if (window.openProfileDrawer) {
+                window.openProfileDrawer(user.username);
+            }
+        }
+    }
     // 更新头像
     if (avatarEl) {
         if (user.avatar) {
@@ -433,7 +382,6 @@ export function updateUserProfileUI(user) {
         }
     }
 }
-
 // ==========================================
 // ⚡️ 裁剪器相关 UI (Cropper Logic)
 // ==========================================
@@ -489,3 +437,217 @@ export function getCroppedCanvas() {
         height: 1000
     });
 }
+
+
+// ==========================================
+// 👤 个人主页抽屉核心逻辑
+// ==========================================
+
+export async function openProfileDrawer(username) {
+    const drawer = document.getElementById('profile-drawer');
+    const backdrop = document.getElementById('profile-backdrop');
+
+    // 1. 立即弹出抽屉，展示 "加载中" 状态 (提升用户体验)
+    drawer.classList.add('open');
+    backdrop.classList.add('active');
+    document.getElementById('profile-username').innerText = '加载中...';
+    document.getElementById('profile-bio').innerText = '';
+    document.getElementById('profile-action-container').innerHTML = ''; // 清空按钮
+
+    try {
+        // 2. ⚡️ 向后端请求资料
+        // 注意：如果你在顶部是 import * as API from './api.js'，这里就用 API.getUserProfile
+        const data = await API.getUserProfile(username); 
+        
+        if (!data.success) throw new Error(data.message);
+
+        const { profile, relation } = data;
+
+        const notes = await API.getNotes(username);   //获取笔记
+
+        // 3. 渲染头像、名字、简介
+        document.getElementById('profile-username').innerText = profile.username;
+        document.getElementById('profile-bio').innerText = profile.bio || '这个人很懒，什么都没写~';
+        
+        // 如果没有头像，使用默认头像
+        const avatarUrl = profile.avatar ? `${profile.avatar}` : '/uploads/avatars/default-avatar.png';
+        document.getElementById('profile-avatar').src = avatarUrl;
+
+        // 4. ⚡️ 核心：根据关系渲染不同的按钮
+        renderProfileActions(username, relation, data.requestId);
+
+        // 渲染笔记
+        renderProfileNotesList(notes);
+
+        if (relation === 'self') {
+            // 顺便把关系网加载好塞进 Tab 里
+            loadAndRenderFriendsNetwork();
+        }
+
+    } catch (err) {
+        console.error('加载主页失败:', err);
+        document.getElementById('profile-username').innerText = '加载失败';
+        document.getElementById('profile-bio').innerText = err.message;
+    }
+}
+
+// 关闭抽屉
+export function closeProfileDrawer() {
+    document.getElementById('profile-drawer').classList.remove('open');
+    document.getElementById('profile-backdrop').classList.remove('active');
+}
+
+// 渲染互动按钮
+function renderProfileActions(targetUsername, relation, requestId) {
+    const container = document.getElementById('profile-action-container');
+    const tabFriendsBtn = document.getElementById('tab-friends-btn');
+    let html = '';
+
+    switch (relation) {
+        case 'self':
+            html = `<button class="btn btn-secondary" onclick="window.toggleEditMode(true)"><span class="material-icons">settings</span>编辑资料</button>`;
+            tabFriendsBtn.style.display = 'flex';
+            break;
+        case 'friend':
+            html = `<button class="btn btn-success" style="cursor: default;"><span class="material-icons">people</span>已是好友</button>`;
+            tabFriendsBtn.style.display = 'none';
+            break;
+        case 'pending_sent':
+            html = `<button class="btn btn-secondary" style="cursor: default;"><span class="material-icons">hourglass_empty</span>等待验证</button>`;
+            tabFriendsBtn.style.display = 'none';
+            break;
+        case 'pending_received':
+            html = `
+                <button class="btn btn-primary" onclick="window.respondToRequest(${requestId}, 'accepted')"><span class="material-icons">check_circle</span>同意</button>
+                <button class="btn btn-danger" onclick="window.respondToRequest(${requestId}, 'rejected')"><span class="material-icons">cancel</span>拒绝</button>
+            `;
+            tabFriendsBtn.style.display = 'none';
+            break;
+        case 'none':
+        default:
+            html = `<button class="btn btn-primary" onclick="window.sendFriendRequest('${targetUsername}')"><span class="material-icons">person_add</span>加为好友</button>`;
+            tabFriendsBtn.style.display = 'none';
+            break;
+    }
+    container.innerHTML = html;
+}
+
+// 初始化抽屉的静态事件 (点击遮罩关闭、Tab切换)
+export function initProfileEvents() {
+    // 绑定关闭按钮和背景遮罩
+    document.getElementById('close-profile-btn').addEventListener('click', closeProfileDrawer);
+    document.getElementById('profile-backdrop').addEventListener('click', closeProfileDrawer);
+
+    // 绑定 Tab 切换逻辑
+    const tabs = document.querySelectorAll('.tab-item');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            // 移除所有的 active 状态
+            tabs.forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            
+            // 激活当前点击的 Tab 和对应的内容区
+            const targetId = e.currentTarget.getAttribute('data-target');
+            e.currentTarget.classList.add('active');
+            document.getElementById(targetId).classList.add('active');
+        });
+    });
+}
+
+// 渲染抽屉里的笔记列表卡片
+export function renderProfileNotesList(notes) {
+    const container = document.getElementById('profile-notes-list');
+    if (!notes || notes.length === 0) {
+        container.innerHTML = '<p class="empty-hint">暂无公开足迹</p>';
+        return;
+    }
+
+    // 简单拼接一段 HTML 列表
+    const html = notes.map(note => `
+        <div class="profile-note-card" style="border-bottom:1px solid #eee; padding: 10px 0; cursor:pointer;" 
+             onclick="window.flyToNote(${note.lat}, ${note.lng})">
+            <h4 style="margin:0 0 5px; color:#333;">${note.title}</h4>
+            <p style="margin:0; font-size:12px; color:#888;">${new Date(note.created_at).toLocaleDateString()}</p>
+        </div>
+    `).join('');
+
+    container.innerHTML = html;
+}
+
+// --- 渲染关系网面板 ---
+export async function loadAndRenderFriendsNetwork() {
+    const container = document.getElementById('profile-friends-list');
+    container.innerHTML = '<div style="text-align:center; padding: 20px;">加载中...</div>';
+
+    try {
+        const data = await API.getMyNetwork(); // 假设你在文件顶部引入了 API
+        if (!data.success) throw new Error(data.message);
+
+        const { pendingRequests, friends } = data;
+        let html = '';
+
+        // --- 上半区：新朋友请求 ---
+        if (pendingRequests && pendingRequests.length > 0) {
+            html += `<h4 style="margin: 0 0 10px; color: #555; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px;">新朋友请求</h4>`;
+            html += pendingRequests.map(req => {
+                const avatar = req.avatar ? (req.avatar.startsWith('http') ? req.avatar : `${req.avatar}`) : '/uploads/avatars/default-avatar.png';
+                return `
+                <div class="friend-item" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+                    <div style="display:flex; align-items:center; cursor:pointer;" onclick="window.openProfileDrawer('${req.requester}')">
+                        <img src="${avatar}" style="width:40px; height:40px; border-radius:50%; margin-right:10px; object-fit:cover;">
+                        <div>
+                            <div style="font-weight:bold; color:#333;">${req.requester}</div>
+                            <div style="font-size:12px; color:#888;">申请添加你为好友</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:5px;">
+                        <button class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;" onclick="window.respondToRequest(${req.id}, 'accepted')">
+                            <span class="material-icons" style="font-size: 16px;">check</span>同意
+                        </button>
+
+                        <button class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="window.respondToRequest(${req.id}, 'rejected')">
+                            <span class="material-icons" style="font-size: 16px;">close</span>拒绝
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // --- 下半区：我的好友 ---
+        html += `<h4 style="margin: 20px 0 10px; color: #555; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px;">我的好友 (${friends.length})</h4>`;
+        if (friends.length === 0) {
+            html += '<p style="color:#999; font-size:13px;">还没有好友，去地图上逛逛吧~</p>';
+        } else {
+            html += friends.map(friend => {
+                const avatar = friend.avatar ? (friend.avatar.startsWith('http') ? friend.avatar : `${friend.avatar}`) : '/uploads/avatars/default-avatar.png';
+                return `
+                <div class="friend-item" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px; cursor:pointer;" onclick="window.openProfileDrawer('${friend.username}')">
+                    
+                    <div style="display:flex; align-items:center;">
+                        <img src="${avatar}" style="width:40px; height:40px; border-radius:50%; margin-right:10px; object-fit:cover;">
+                        <div>
+                            <div style="font-weight:bold; color:#333;">${friend.username}</div>
+                            <div style="font-size:12px; color:#888;">${friend.bio || '这个人很懒，什么都没写~'}</div>
+                        </div>
+                    </div>
+
+                    <button class="btn-danger" style="padding: 4px 8px; font-size: 12px; opacity: 0.8;" 
+                        onclick="event.stopPropagation(); window.handleRemoveFriend('${friend.username}')">
+                        删除
+                    </button>
+
+                </div>`;
+            }).join('');
+        }
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error(err);
+        container.innerHTML = '<div style="color:red; text-align:center;">加载关系网失败</div>';
+    }
+}
+
+
+
+

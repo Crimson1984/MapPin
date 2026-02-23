@@ -1,14 +1,13 @@
 // public/js/app.js
 import { initMap, 
     addMarker, 
-    getMap, 
     clearMarkers, 
-    closeMapPopup,
     fitToMarkers,
     addDraftMarker,
+    flyToNote
 } from './mapManager.js';
 
-import { renderReadMode, 
+import { 
     showFloatingCard, 
     hideFloatingCard, 
     renderSearchResults, 
@@ -19,7 +18,10 @@ import { renderReadMode,
     showCropModal,
     hideCropModal,
     getCroppedCanvas,
-    createQuickPopupContent
+    createQuickPopupContent,
+    initProfileEvents,
+    openProfileDrawer,
+    loadAndRenderFriendsNetwork
 } from './uiManager.js';
 
 import { insertAtCursor, debounce } from './utils.js'; // 引入工具函数
@@ -78,6 +80,7 @@ async function initApp() {
     }
 
     loadInboxData();
+    initProfileEvents();
 }
 
 // 执行初始化
@@ -435,6 +438,8 @@ window.sendFriendRequest = async function(receiverName) {
         const res = await API.sendFriendRequest(receiverName);
         if (res.success) {
             alert(res.message);
+            // 刷新
+            if (window.openProfileDrawer) window.openProfileDrawer(receiverName);
         } else {
             alert('请求失败: ' + res.message);
         }
@@ -462,9 +467,15 @@ window.respondToRequest = async function(id, action) {
         if (res.success) {
             // 操作成功后，重新加载信箱列表
             await loadInboxData();
+
+            // 刷新
+            const currentDrawerName = document.getElementById('profile-username')?.innerText;
+            if (currentDrawerName && window.openProfileDrawer) {
+                window.openProfileDrawer(currentDrawerName);
+            }
             
             // 可选：如果是同意了，可能需要刷新一下地图或者用户搜索列表
-            // loadNotes(); 
+            loadNotes(); 
         } else {
             alert(res.message);
         }
@@ -528,6 +539,100 @@ window.handleFileUpload = async function(inputElement, textAreaId) {
     }
 };
 
+// 处理删除好友逻辑
+window.handleRemoveFriend = async function (targetUsername) {
+    // 1. 安全提示：给用户反悔的机会
+    if (!confirm(`确定要和 ${targetUsername} 解除好友关系吗？\n解除后你们将无法查看对方的私密笔记。`)) {
+        return; 
+    }
+
+    try {
+        // 2. 发送请求
+        const res = await API.removeFriend(targetUsername); // 假设 API 已引入
+        
+        if (res.success) {
+            // 3. 丝滑重绘：不刷新页面，仅重新拉取一遍关系网面板
+            if (loadAndRenderFriendsNetwork) {
+                loadAndRenderFriendsNetwork();
+            }
+        } else {
+            alert(res.message || '删除失败');
+        }
+    } catch (err) {
+        console.error('删除好友出错:', err);
+        alert('网络错误，请稍后再试');
+    }
+}
+
+// 简介切换编辑模式
+window.toggleEditMode = async function (isEditing) {
+    const bioText = document.getElementById('profile-bio');
+    const bioInput = document.getElementById('profile-bio-input');
+    const actionContainer = document.getElementById('profile-action-container');
+    const avatarEl = document.getElementById('profile-avatar');
+
+    if (isEditing) {
+        // 进入编辑模式：隐藏文字，显示输入框
+        bioInput.value = bioText.innerText === '这个人很懒，什么都没写~' ? '' : bioText.innerText;
+        bioText.style.display = 'none';
+        bioInput.style.display = 'block';
+        bioInput.focus();
+
+        // 按钮变成“保存”和“取消”
+        actionContainer.innerHTML = `
+        <button class="btn btn-primary" onclick="window.saveProfileData()"><span class="material-icons">save</span>保存</button>
+        <button class="btn btn-secondary" onclick="window.toggleEditMode(false)"><span class="material-icons">close</span>取消</button>
+        `;
+
+        // 让头像变得可点击 (提示用户可以换头像)
+        avatarEl.style.cursor = 'pointer';
+        avatarEl.title = '点击更换头像';
+        avatarEl.onclick = () => document.getElementById('avatar-input').click();
+        avatarEl.style.border = '3px dashed #007bff'; // 加个虚线框提示
+    } else {
+        // 退出编辑模式：恢复原状
+        bioText.style.display = 'block';
+        bioInput.style.display = 'none';
+        
+        // 按钮变回“编辑资料”
+        actionContainer.innerHTML = `<button class="btn btn-secondary" onclick="window.toggleEditMode(true)"><span class="material-icons">edit_note</span>编辑资料</button>`;
+        
+        // 恢复头像不可点击状态
+        avatarEl.style.cursor = 'default';
+        avatarEl.title = '';
+        avatarEl.onclick = null;
+        avatarEl.style.border = '3px solid #fff';
+    }
+}
+
+// 简介资料更新
+window.saveProfileData = async function () {
+    const newBio = document.getElementById('profile-bio-input').value.trim();
+    const btnContainer = document.getElementById('profile-action-container');
+    
+    // 简单做个防抖/状态提示
+    btnContainer.innerHTML = `<button class="btn-secondary" disabled>保存中...</button>`;
+
+    try {
+        const res = await API.updateProfile(newBio); // 假设你在头部 import 了 API
+        if (res.success) {
+            // 更新 UI 上的文字
+            document.getElementById('profile-bio').innerText = newBio || '这个人很懒，什么都没写~';
+            // 退出编辑模式
+            toggleEditMode(false);
+        } else {
+            alert(res.message || '保存失败');
+            toggleEditMode(true); // 恢复编辑按钮
+        }
+    } catch (error) {
+        console.error('保存资料失败:', error);
+        alert('网络错误，请稍后再试');
+        toggleEditMode(true);
+    }
+}
+
 // 页面加载完成
 console.log('App 初始化完成');
 window.loadNotes = loadNotes;
+window.openProfileDrawer = openProfileDrawer;
+window.flyToNote = flyToNote;

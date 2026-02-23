@@ -295,22 +295,6 @@ export function getMap() {
     return map;
 }
 
-// // --- 持久化状态保存函数 ---
-// export function saveUserViewState(lat, lng) {
-//     if (!lat || !lng) return;
-
-//     // 1. 保存最后编辑/发布的坐标
-//     localStorage.setItem('MAPPIN_CENTER', JSON.stringify([lat, lng]));
-
-//     // 2. 获取当前地图真实的放大倍数并保存
-//     const mapInstance = getMap();
-//     if (mapInstance) {
-//         localStorage.setItem('MAPPIN_ZOOM', mapInstance.getZoom());
-//     }
-
-//     console.log(`[状态持久化] 已记录最后活动坐标: ${lat}, ${lng}`);
-// }
-
 
 // 清空所有标记
 export function clearMarkers() {
@@ -405,6 +389,29 @@ export function fitToMarkers() {
     if (markers.length > 0) {
         const group = new L.featureGroup(markers);
         map.fitBounds(group.getBounds(), { padding: [50, 50] });
+    }
+}
+
+// --- 飞跃到指定位置 ---
+export function flyToNote(lat, lng) {
+    if (!map) return;
+
+    // 1. 拦截并转换坐标 (WGS84 -> 屏幕视图坐标)
+    const [viewLat, viewLng] = toView(lat, lng);
+
+    // 2. 调用 Leaflet 原生飞跃方法
+    map.flyTo([viewLat, viewLng], 10, {
+        animate: true,
+        duration: 1.5 // 飞行时间 1.5 秒，纵享丝滑
+    });
+
+    // 3. 自动关闭侧边栏，把视野还给地图
+    // 因为 closeProfileDrawer 写在 uiManager.js 里，我们可以直接操作 DOM 类名，或者调用暴露的全局方法
+    const drawer = document.getElementById('profile-drawer');
+    const backdrop = document.getElementById('profile-backdrop');
+    if (drawer && backdrop) {
+        drawer.classList.remove('open');
+        backdrop.classList.remove('active');
     }
 }
 

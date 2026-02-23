@@ -33,7 +33,13 @@
         <input type="file" id="avatar-input" accept="image/*" hidden 
                onchange="window.handleAvatarSelected(this)">
         
-        <div id="my-username" style="background:rgba(255,255,255,0.9); padding:4px 8px; border-radius:4px; font-weight:bold; margin-top:5px; box-shadow: var(--shadow-sm);">Loading...</div>
+        <div id="my-username" 
+            style="background:rgba(255,255,255,0.9); padding:4px 8px; border-radius:4px; font-weight:bold; margin-top:5px; box-shadow: var(--shadow-sm); cursor:pointer;"
+            title="查看我的主页"
+            onmouseover="this.style.color='#007bff'" 
+            onmouseout="this.style.color='#333'"
+            >Loading...</div>
+
     </div>
 
     <div id="search-container">
@@ -158,6 +164,47 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <div id="profile-backdrop" class="drawer-backdrop"></div>
+    
+    <div id="profile-drawer" class="profile-drawer">
+        <div class="drawer-header">
+            <button id="close-profile-btn" class="icon-btn">
+                <span class="material-icons">close</span>
+            </button>
+        </div>
+
+        <div class="profile-info-section">
+            <img id="profile-avatar" src="/uploads/avatars/default-avatar.png" alt="Avatar" class="profile-large-avatar">
+            <h2 id="profile-username" class="profile-name">加载中...</h2>
+            <p id="profile-bio" class="profile-bio">这个人很懒，什么都没写~</p>
+            <textarea id="profile-bio-input" class="profile-bio-edit" maxlength="100" style="display: none;" placeholder="写点什么介绍一下自己吧..."></textarea>
+        </div>
+
+        <div id="profile-action-container" class="profile-actions">
+            </div>
+
+        <div class="profile-tabs">
+            <div class="tab-item active" data-target="tab-notes">
+                <span class="material-icons">place</span> 足迹
+            </div>
+            <div class="tab-item" data-target="tab-friends" id="tab-friends-btn" style="display: none;">
+                <span class="material-icons">people</span> 好友
+            </div>
+        </div>
+
+        <div class="profile-content">
+            <div id="tab-notes" class="tab-pane active">
+                <div id="profile-notes-list" class="notes-list-container">
+                    <p class="empty-hint">暂无公开足迹</p>
+                </div>
+            </div>
+            <div id="tab-friends" class="tab-pane">
+                <div id="profile-friends-list" class="friends-list-container">
+                    </div>
+            </div>
         </div>
     </div>
 

@@ -111,6 +111,11 @@ export const API = {
     // 用户相关
     getCurrentUser: () => request('/users/me'),
 
+    updateProfile: (bio) => request('/users/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ bio }),
+    }),
+
     // 上传头像
     uploadAvatar: (formData) => request('/users/avatar', { 
         method: 'POST', 
@@ -126,7 +131,12 @@ export const API = {
     // 好友相关
     // 搜索用户
     searchUsers: (query) => request(`/users/search?q=${query}`),
+
+    // 获取用户主页
+    getUserProfile: (username) => request(`/users/profile/${encodeURIComponent(username)}`),
     
+    getMyNetwork: () => request('/friends/my-network'),
+
     // 发送好友请求 
     sendFriendRequest: (receiverUsername) => request('/friends/request', {
         method: 'POST',
@@ -140,5 +150,10 @@ export const API = {
     respondToRequest: (id, action) => request('/friends/response', { 
         method: 'PUT', 
         body: JSON.stringify({ id, action }) 
+    }),
+
+    removeFriend: (username) => request('/friends/remove', {
+        method: 'PUT', 
+        body: JSON.stringify({ username })
     })
 };
