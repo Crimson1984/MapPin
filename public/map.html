@@ -17,6 +17,11 @@
     <script src="./lib/marked/marked.min.js"></script>
     <script src="./lib/dompurify/purify.min.js"></script>
     <script src="./lib/cropper/cropper.min.js"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 </head>
 <body>
     
@@ -32,27 +37,6 @@
         <div id="my-username" class="profile-username-badge"
             title="查看我的主页">Loading...</div>
     </div>
-
-    <!-- <div id="search-container">
-        <input type="text" id="user-search" class="form-control" placeholder="🔍 搜索用户..." autocomplete="off">
-        
-        <div id="search-results"></div> 
-
-        <div id="visiting-banner" style="display:none;">
-            <span>正在浏览: <b id="visit-name"></b></span>
-            <button class="btn btn-secondary" onclick="window.exitVisitMode()" style="padding: 2px 8px; font-size: 12px;">退出访问</button>
-        </div>
-
-        <div style="margin-top: 10px; position: relative;">
-            <button id="inbox-btn" class="btn btn-secondary" onclick="window.toggleInbox()" 
-                    style="width:100%; justify-content:space-between;">
-                <span class="flex-center"><span class="material-icons" style="font-size:16px;">mail</span> 好友请求</span>
-                <span id="request-count" style="background:rgba(0,0,0,0.1); padding:0 6px; border-radius:10px; font-size:12px;">(0)</span>
-            </button>
-            
-            <div id="inbox-list" style="display:none;"></div>
-        </div>
-    </div> -->
 
     <div id="search-container" class="mobile-tools-container">
     

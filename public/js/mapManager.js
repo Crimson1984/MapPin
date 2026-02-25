@@ -13,43 +13,38 @@ const TILE_LAYERS_CONFIG = {
         options: { attribution: 'Tiles &copy; Esri' }
     },
 
-    // carto_light: {
-    //     name: "🏳️ 灰色 (CartoDB)",
-    //     url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    //     options: { attribution: '&copy; OpenStreetMap &copy; CartoDB', subdomains: 'abcd' }
-    // },
-
-    // dark: {
-    //     name: "🌑 深色模式 (CartoDB)",
-    //     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    //     options: { attribution: '&copy; CartoDB' }
-    // },
     gaode: {
-        name: "🚗 高德地图 (有偏移)",
+        name: "🚗 高德地图 ",
         url: 'http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
         options: { subdomains: "1234" }
     },
 
-    // // 2. [高对比] OSM 人道主义 (推荐！颜色好看)
-    // osm_hot: {
-    //     name: "🔥 人道主义(OSM)",
-    //     url: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-    //     options: { attribution: '&copy; OpenStreetMap contributors, Tiles style by Humanitarian OpenStreetMap Team hosted by OSM France' }
-    // },
+    // 2. 国家地理风格 (极其美观，复古探险风，非常适合做足迹地图底图！)
+    natgeo: {
+        name: "🧭 国家地理 (Esri)",
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+        options: { attribution: 'Tiles &copy; Esri & National Geographic' }
+    },
 
-    // // 3. [功能] 骑行地图 (带等高线)
-    // osm_cycle: {
-    //     name: "🚲 骑行与地形(OSM)",
-    //     url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
-    //     options: { attribution: '&copy; CyclOSM' }
-    // },
+    // 3. 深灰底图 (数据可视化的绝佳选择，配合你的热力图效果炸裂！)
+    dark_gray: {
+        name: "🌑 极暗深灰 (Esri)",
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        options: { attribution: 'Tiles &copy; Esri' }
+    },
 
-    // // 4. [功能] 公共交通
-    // osm_transport: {
-    //     name: "🚇 公共交通(OSM)",
-    //     url: 'https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png',
-    //     options: { attribution: '&copy; ÖPNVkarte' }
-    // }
+    // ⚡️ 5. 组合图层：带地名和路网的卫星图 
+    satellite_labeled: {
+        name: "🌍 混合卫星图 (带标注)",
+        isGroup: true, // 告诉解析器，这是一个组合图层！
+        urls: [
+            // 底层：卫星影像
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            // 顶层：透明的标注、国界、路网层 (World_Boundaries_and_Places)
+            'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
+        ],
+        options: { attribution: 'Tiles &copy; Esri' }
+    }
 
 };
 
@@ -93,59 +88,13 @@ let map = null; // 模块内部私有变量
 let markersLayer = null; // ⚡️ 新增：用于存放所有标记的容器
 let userLocationMarker = null; //定位红点
 
-export function initMap() {
+// 热力图状态与图层
+let heatLayer = null; 
+let isHeatmapMode = false; // 当前是否处于热力图模式
 
-    // [读档]: 从浏览器记事本 (localStorage) 里读取用户上次的习惯
-    // 如果是第一次来没数据，就使用 || 后面的默认值
-    const savedCenter = JSON.parse(localStorage.getItem('MAPPIN_CENTER')) || [31.88, 118.82];
-    const savedZoom = parseInt(localStorage.getItem('MAPPIN_ZOOM'), 10) || 13;
-    const savedLayerKey = localStorage.getItem('MAPPIN_LAYER') || 'osm';
+//  自定义控件模块:添加定位按钮与逻辑
 
-
-    //动态生成图层对象
-    const layers = {};
-    let defaultLayer = null;
-    
-    // 用来记录图层名字(name)和键值(key)的对应关系，方便存档
-    const layerNameToKey = {};
-
-    // 遍历配置生成 Layer 实例
-    for (const [key, config] of Object.entries(TILE_LAYERS_CONFIG)) {
-        const layer = L.tileLayer(config.url, config.options);
-        layers[config.name] = layer;
-        layerNameToKey[config.name] = key; // 建立反向映射字典
-        
-        // [应用图层习惯]: 如果当前遍历的 key 等于用户上次保存的图层，就把它设为默认
-        if (key === savedLayerKey) {
-            defaultLayer = layer;
-        }
-    }
-
-    // 防御性兜底：万一存的图层失效了，强行切回 osm
-    if (!defaultLayer && layers['osm']) {
-        defaultLayer = layers['osm'];
-    }
-
-    // 1. 初始化地图
-    map = L.map('map', {
-        doubleClickZoom: false,
-        center: savedCenter, 
-        zoom: savedZoom,
-        zoomControl: false, // 我们先把默认的缩放控件关了，后面可以换位置
-        layers: [defaultLayer]  // 默认显示的图层
-    });
-
-    // 添加图层控制器 
-    // position: 'topleft' | 'topright' | 'bottomleft' | 'bottomright'
-    L.control.layers(layers, null, { 
-        position: 'bottomleft', // 👈 移到左下角，避开头像
-        collapsed: true         // 设为 false 可以让它永远展开(如果你喜欢)
-    }).addTo(map);
-
-    // 初始化标记图层组，并添加到地图上
-    markersLayer = L.layerGroup().addTo(map);
-
-    // 自定义定位控件
+function addLocateControl(map){
     const LocateControl = L.Control.extend({
         options: {
             position: 'bottomleft' // 同样放在左下角，Leaflet 会自动把它和上面两个排成一列
@@ -252,8 +201,119 @@ export function initMap() {
         }
     });
 
-    // 把我们自定义的控件加到地图上
     map.addControl(new LocateControl());
+}
+
+//   自定义控件模块：热力图切换按钮
+
+function addHeatmapControl(map) {
+    const HeatmapControl = L.Control.extend({
+        options: { position: 'bottomleft' }, // 同样放在左下角，Leaflet会自动把它们叠在一起
+        onAdd: function(map) {
+            const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+            const button = L.DomUtil.create('a', '', container);
+            button.href = '#';
+            button.title = '切换热力图视图';
+            button.style.display = 'flex';
+            button.style.justifyContent = 'center';
+            button.style.alignItems = 'center';
+            button.style.paddingLeft = '4px';
+
+            // ⚡️ 赋给它一个独特的 ID：leaflet-heat-icon，方便后续用 JS 修改它的颜色和图标
+            button.innerHTML = '<span class="material-icons" id="leaflet-heat-icon" style="font-size: 18px; color: #1a73e8;">layers</span>';
+            
+            L.DomEvent.disableClickPropagation(button);
+            L.DomEvent.disableScrollPropagation(button);
+
+            button.onclick = function(e) {
+                e.preventDefault();
+                toggleHeatmapMode(); // 调用底部的切换函数
+            };
+            return container;
+        }
+    });
+
+    map.addControl(new HeatmapControl());
+}
+
+
+export function initMap() {
+
+    // [读档]: 从浏览器记事本 (localStorage) 里读取用户上次的习惯
+    // 如果是第一次来没数据，就使用 || 后面的默认值
+    const savedCenter = JSON.parse(localStorage.getItem('MAPPIN_CENTER')) || [31.88, 118.82];
+    const savedZoom = parseInt(localStorage.getItem('MAPPIN_ZOOM'), 10) || 13;
+    const savedLayerKey = localStorage.getItem('MAPPIN_LAYER') || 'gaode';
+    // if(!savedLayerKey) savedLayerKey = 'gaode';
+
+
+    //动态生成图层对象
+    const layers = {};
+    let defaultLayer = null;
+    
+    // 用来记录图层名字(name)和键值(key)的对应关系，方便存档
+    const layerNameToKey = {};
+
+    // 遍历配置生成 Layer 实例
+    for (const [key, config] of Object.entries(TILE_LAYERS_CONFIG)) {
+        let layer;
+        
+        // 检查是否为“组合图层 (isGroup)”
+        if (config.isGroup && Array.isArray(config.urls)) {
+            // 用 L.layerGroup 把多个瓦片层打包成一个单一可切换的底图
+            const tileLayers = config.urls.map(url => L.tileLayer(url, config.options));
+            layer = L.layerGroup(tileLayers);
+        } else {
+            // 普通单层瓦片图
+            layer = L.tileLayer(config.url, config.options);
+        }
+        
+        layers[config.name] = layer;
+        layerNameToKey[config.name] = key; // 建立反向映射字典
+        
+        // [应用图层习惯]: 如果当前遍历的 key 等于用户上次保存的图层，就把它设为默认
+        if (key === savedLayerKey) {
+            defaultLayer = layer;
+        }
+    }
+
+    //防御性兜底
+    if (!defaultLayer) {
+        const availableLayers = Object.values(layers);
+        if (availableLayers.length > 0) {
+            defaultLayer = availableLayers[0]; // 强行拿第一张地图来救场
+            // 顺便把 localStorage 里的脏数据覆盖掉，防止下次接着报错
+            const firstKey = Object.keys(TILE_LAYERS_CONFIG)[0];
+            localStorage.setItem('MAPPIN_LAYER', firstKey);
+            console.warn(`[恢复默认图层] 之前保存的地图源已失效，已自动重置为: ${firstKey}`);
+        } else {
+            // 如果连 TILE_LAYERS_CONFIG 都被你清空了，那就只能抛出明确错误了
+            console.error("致命错误：TILE_LAYERS_CONFIG 中没有任何可用的地图图层！");
+        }
+    }
+
+    // 1. 初始化地图
+    map = L.map('map', {
+        doubleClickZoom: false,
+        center: savedCenter, 
+        zoom: savedZoom,
+        zoomControl: false, // 我们先把默认的缩放控件关了，后面可以换位置
+        layers: [defaultLayer]  // 默认显示的图层
+    });
+
+    // 添加图层控制器 
+    // position: 'topleft' | 'topright' | 'bottomleft' | 'bottomright'
+    L.control.layers(layers, null, { 
+        position: 'bottomleft', // 👈 移到左下角，避开头像
+        collapsed: true         // 设为 false 可以让它永远展开(如果你喜欢)
+    }).addTo(map);
+
+    // 初始化标记图层组，并添加到地图上
+    initMarkerCluster(map);
+
+    // 自定义定位控件
+    addLocateControl(map);
+    addHeatmapControl(map);
 
     // ==========================================
     // 💾 状态持久化：自动存档监听器
@@ -342,6 +402,47 @@ export function addMarker(note, onClickCallback) {
     return marker;
 }
 
+// 专属于聚合图层的初始化函数
+// 请确保在 app.js 初始化地图(L.map)后，立刻调用这个函数
+export function initMarkerCluster(map) {
+    // 如果已经有了，先从地图上移除
+    if (markersLayer) {
+        map.removeLayer(markersLayer);
+    }
+    
+    // 魔法变身：使用 L.markerClusterGroup 替代普通的 L.layerGroup
+    markersLayer = L.markerClusterGroup({
+        showCoverageOnHover: false, // 隐藏鼠标悬浮时出现的丑陋多边形边界
+        maxClusterRadius: 40,       // 聚合半径（像素），越小气泡越多，越大越容易聚成一个大球
+        spiderfyOnMaxZoom: true,    // 开启震撼的“蜘蛛网”裂变特效（重叠点放大到极限后炸开）
+        zoomToBoundsOnClick: true,   // 点击气泡时，自动平滑缩放飞跃过去
+
+        // 接管聚合图标的生成
+        iconCreateFunction: function(cluster) {
+            // 1. 获取这个气泡里到底“吃掉”了多少个红点
+            const count = cluster.getChildCount(); 
+            
+            // 2. 根据数量，给气泡分配不同的大小/颜色类别
+            let sizeClass = 'cluster-small';
+            if (count >= 10) sizeClass = 'cluster-medium';
+            if (count >= 50) sizeClass = 'cluster-large';
+
+            // 3. 返回一个纯粹由 HTML 和 CSS 构成的 DivIcon
+            return L.divIcon({
+                // 生成内部的 HTML 结构，填入数字
+                html: `<div><span>${count}</span></div>`,
+                // 绑定自定义的基类和体积类
+                className: `custom-marker-cluster ${sizeClass}`,
+                // 声明图标的外壳尺寸（保证点击热区准确）
+                iconSize: L.point(40, 40) 
+            });
+        }
+    });
+    
+    // 把带有超能力的容器挂载到地图上
+    map.addLayer(markersLayer);
+}
+
 
 /**
  * ⚡️ 添加草稿标记
@@ -419,5 +520,65 @@ export function flyToNote(lat, lng) {
 export function closeMapPopup() {
     if (map) {
         map.closePopup();
+    }
+}
+
+// ==========================================
+// 🔥 热力图引擎 (Heatmap Engine)
+// ==========================================
+
+// 渲染热力图数据
+export function renderHeatmap(notes) {
+    if (!map) return;
+
+    // A. 每次渲染前，先清除旧的热力图层
+    if (heatLayer) {
+        map.removeLayer(heatLayer);
+    }
+
+    // B. 从 notes 中提取坐标，并进行火星坐标转换
+    // 热力图格式要求: [[lat, lng, intensity], ...] 
+    const heatData = notes.map(note => {
+        const [viewLat, viewLng] = toView(note.lat, note.lng);
+        return [viewLat, viewLng, 1]; // 1 代表权重强度
+    });
+
+    // C. 生成全新的热力图层 (配置颜色渐变和扩散半径)
+    heatLayer = L.heatLayer(heatData, {
+        radius: 25,    // 每个点的发散半径
+        blur: 15,      // 模糊度，越大颜色交织越柔和
+        maxZoom: 15,   // 超过这个缩放级别，点就不再扩散了
+        // 经典的红蓝渐变色卡
+        gradient: { 0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1.0: 'red' }
+    });
+
+    // D. 如果当前刚好是热力图模式，就立刻把它贴到地图上
+    if (isHeatmapMode) {
+        heatLayer.addTo(map);
+    }
+}
+
+// 切换视图模式 (供悬浮按钮点击调用)
+export function toggleHeatmapMode() {
+    isHeatmapMode = !isHeatmapMode;
+    // ⚡️ 注意：这里的 ID 换成了刚才在控件里定义的 ID
+    const btnIcon = document.getElementById('leaflet-heat-icon');
+
+    if (isHeatmapMode) {
+        if (markersLayer) map.removeLayer(markersLayer);
+        if (heatLayer) heatLayer.addTo(map);
+        
+        if (btnIcon) {
+            btnIcon.innerText = 'whatshot';
+            btnIcon.style.color = '#d93025'; // 危险红 (var(--danger-color))
+        }
+    } else {
+        if (heatLayer) map.removeLayer(heatLayer);
+        if (markersLayer) markersLayer.addTo(map);
+        
+        if (btnIcon) {
+            btnIcon.innerText = 'layers';
+            btnIcon.style.color = '#1a73e8'; // 主题蓝
+        }
     }
 }

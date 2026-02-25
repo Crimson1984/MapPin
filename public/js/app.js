@@ -4,7 +4,8 @@ import { initMap,
     clearMarkers, 
     fitToMarkers,
     addDraftMarker,
-    flyToNote
+    flyToNote,
+    renderHeatmap, toggleHeatmapMode
 } from './mapManager.js';
 
 import { 
@@ -162,6 +163,9 @@ async function loadNotes(targetUser = null) {
                 
             });
         });
+
+        // 把拿到的全量笔记数据喂给热力图引擎生成备用图层
+        renderHeatmap(notes);
 
         // 如果是查看特定用户，自动调整视野
         if (targetUser && notes.length > 0) {
@@ -636,3 +640,4 @@ console.log('App 初始化完成');
 window.loadNotes = loadNotes;
 window.openProfileDrawer = openProfileDrawer;
 window.flyToNote = flyToNote;
+window.toggleHeatmapMode = toggleHeatmapMode;

@@ -137,14 +137,6 @@ select.form-control {
 .avatar-lg { width: 80px; height: 80px; }
 
 /* --- 统一列表项 (关系网/信箱/搜索) --- */
-/* .user-list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-color); margin-bottom: 10px; }
-.user-list-info { display: flex; align-items: center; cursor: pointer; flex: 1; }
-.user-list-avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; object-fit: cover; }
-.user-list-text .name { font-weight: bold; color: var(--text-main); margin-bottom: 2px; }
-.user-list-text .sub { font-size: 12px; color: var(--text-secondary); }
-.user-list-actions { display: flex; gap: 5px; }
-.section-title { margin: 20px 0 10px; color: var(--text-secondary); font-size: 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; } */
-/* --- 4. 统一的通用列表项 (现代悬浮圆角版) --- */
 .user-list-item {
     display: flex;
     justify-content: space-between;
@@ -360,6 +352,55 @@ select.form-control {
 .quick-popup-container { padding: 10px; min-width: 260px; text-align: center; }
 .quick-popup-header { margin: 0 0 10px 0; font-size: 16px; }
 
+   
+
+/* --- 4.自定义聚合气泡样式 (Marker Cluster) --- */
+/* 外圈：半透明的光晕效果 */
+.custom-marker-cluster {
+    background-clip: padding-box;
+    border-radius: 50%;
+    transition: transform 0.2s ease-in-out;
+}
+
+/* 鼠标放上去时气泡会轻微放大跳动 */
+.custom-marker-cluster:hover {
+    transform: scale(1.1);
+    z-index: 1000 !important;
+}
+
+/* 内圈：实心的数字圆盘 */
+.custom-marker-cluster div {
+    width: 30px;
+    height: 30px;
+    margin-left: 5px; /* 让内圈在外圈中完美居中 (40-30)/2 */
+    margin-top: 5px;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    border-radius: 50%;
+    color: white;
+    font-weight: bold;
+    font-size: 13px;
+    box-shadow: var(--shadow-sm); /* 调用你定义好的阴影 */
+}
+
+/* --- 根据数量级赋予不同的颜色体系 --- */
+
+/* 1-9个点：MapPin 经典蓝 */
+.cluster-small { background-color: rgba(26, 115, 232, 0.4); } 
+.cluster-small div { background-color: var(--primary-color); }
+
+/* 10-49个点：警告黄 */
+.cluster-medium { background-color: rgba(249, 171, 0, 0.4); }
+.cluster-medium div { background-color: var(--warning-color); }
+
+/* 50个点以上：热力红 */
+.cluster-large { background-color: rgba(217, 48, 37, 0.4); }
+.cluster-large div { background-color: var(--danger-color); }
+
+
 /* =========================================
    6. Profile Drawer (右侧/底部抽屉)
    ========================================= */
@@ -567,4 +608,5 @@ select.form-control {
     .modal-card { height: 90vh; border-radius: 12px 12px 0 0; margin-top: auto; }
     .editor-toolbar { overflow-x: auto; white-space: nowrap; padding-bottom: 2px; }
     .toolbar-group { padding-right: 4px; margin-right: 4px; }
+
 }
