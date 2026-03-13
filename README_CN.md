@@ -1,3 +1,4 @@
+# 此项目已完成目标. [点此](https://github.com/Crimson1984/MapPin-Svelte)获取最新版本
 [🇺🇸 English](README.md) | [🇨🇳 简体中文](README_CN.md) 
 
 # 🗺️ MapPin - 地理笔记
